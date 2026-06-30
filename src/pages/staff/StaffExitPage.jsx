@@ -1,13 +1,23 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useOutletContext } from "react-router-dom";
 import {
-  AlertTriangle,
   Camera,
   CreditCard,
   ReceiptText,
   RadioTower,
   Search,
   ShieldAlert,
-  ShieldCheck,
+  AlertTriangle,
+  QrCode,
+  CheckCircle2,
+  Info,
+  Clock3,
+  Bell,
+  ChevronDown,
+  CarFront,
+  Image as ImageIcon,
+  Check,
+  XCircle
 } from "lucide-react";
 import { toast } from "sonner";
 import { staffSessionService } from "@/services/staffSessionService";
@@ -18,26 +28,41 @@ import {
 } from "@/services/gateSimulatorBus";
 import { formatDateTime, formatVND } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { DetailTile, PageShell, PageHeader } from "@/components/layout/PageScaffold";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 
 function normalizePlate(value) {
   return String(value || "").replace(/[^a-z0-9]/gi, "").toUpperCase();
 }
 
+function ImagePreviewDialog({ preview, onOpenChange }) {
+  if (!preview) return null;
+  return (
+    <Dialog open={!!preview} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-2xl bg-slate-900 border-none p-0 overflow-hidden">
+        <DialogHeader className="p-4 bg-black/50 absolute top-0 w-full z-10">
+          <DialogTitle className="text-white">{preview.title}</DialogTitle>
+        </DialogHeader>
+        <div className="relative w-full aspect-video flex items-center justify-center bg-black pt-14 pb-4 px-4">
+          <img src={preview.image} alt={preview.title} className="max-w-full max-h-[80vh] object-contain rounded-lg" />
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function StaffExitPage() {
-  const [cardCode, setCardCode] = useState("CARD-0002");
+  const { currentUser } = useOutletContext() || {};
+  const staffName = currentUser?.fullName || currentUser?.username || "Nhân viên Trực";
+
+  const [cardCode, setCardCode] = useState("");
   const [plate, setPlate] = useState("");
   const [session, setSession] = useState(null);
   const [fee, setFee] = useState(null);
@@ -47,19 +72,16 @@ export default function StaffExitPage() {
   const [deviceEvent, setDeviceEvent] = useState(null);
   const [mismatchCase, setMismatchCase] = useState(null);
   const [isCreatingMismatch, setIsCreatingMismatch] = useState(false);
-  const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
+  const [previewImage, setPreviewImage] = useState(null);
+  const [currentTime, setCurrentTime] = useState(formatDateTime(new Date()));
+
   const processedEventRef = useRef("");
-  const mainContentRef = useRef(null);
 
   useEffect(() => {
-    const scroll = () => {
-      if (mainContentRef.current) {
-        mainContentRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
-      }
-    };
-    scroll();
-    const timer = setTimeout(scroll, 150);
-    return () => clearTimeout(timer);
+    const timer = setInterval(() => {
+      setCurrentTime(formatDateTime(new Date()));
+    }, 1000);
+    return () => clearInterval(timer);
   }, []);
 
   const loadFee = useCallback(async (targetSession) => {
@@ -94,7 +116,6 @@ export default function StaffExitPage() {
         setSession(found);
         await loadFee(found);
         
-        // Check if there is an existing mismatch case for this session
         try {
           const mismatches = await approvalService.getMismatchCases();
           const matched = mismatches.find((m) => m.sessionId === found.id);
@@ -106,7 +127,6 @@ export default function StaffExitPage() {
         }
 
         toast.success(`Đã tìm thấy phiên ${found.sessionCode}`);
-        setIsCheckoutOpen(true);
       } catch (error) {
         setSession(null);
         setFee(null);
@@ -121,7 +141,6 @@ export default function StaffExitPage() {
   const applyExitDeviceEvent = useCallback(
     async (event) => {
       if (event.gateType !== "EXIT" || processedEventRef.current === event.id) return;
-
       processedEventRef.current = event.id;
       setDeviceEvent(event);
       setCardCode(event.cardCode || "");
@@ -134,8 +153,6 @@ export default function StaffExitPage() {
           nextCardCode: event.cardCode || "",
           nextPlate: event.detectedPlate || "",
         });
-      } else {
-        toast.info("Thiết bị cổng ra đã kết nối nhưng chưa có payload thẻ hoặc biển số.");
       }
     },
     [runSearch]
@@ -146,34 +163,28 @@ export default function StaffExitPage() {
     if (lastEvent) {
       applyExitDeviceEvent(lastEvent);
     }
-
     return subscribeGateScanEvents(applyExitDeviceEvent);
   }, [applyExitDeviceEvent]);
 
-  // Polling for mismatch approval status updates from manager
   useEffect(() => {
     if (!session || !mismatchCase || mismatchCase.status !== "PENDING") return;
-
     const interval = setInterval(async () => {
       try {
         const mismatches = await approvalService.getMismatchCases();
         const matched = mismatches.find((m) => m.id === mismatchCase.id);
         if (matched && matched.status !== mismatchCase.status) {
           setMismatchCase(matched);
-          toast.info(`Hồ sơ sự cố ${matched.caseCode} đã được cập nhật thành: ${matched.status}`);
+          toast.info(`Hồ sơ sự cố ${matched.caseCode} đã được cập nhật: ${matched.status}`);
         }
       } catch (err) {
         console.error("Lỗi cập nhật trạng thái hồ sơ:", err);
       }
     }, 4000);
-
     return () => clearInterval(interval);
   }, [session, mismatchCase]);
 
-  // Derived state (no intermediate useState + useEffect) - Vercel Best Practices
   const hasMismatch = useMemo(() => {
     if (!session) return false;
-    // Compare entry plate with current plate input (which is mutable and can be corrected by staff)
     return normalizePlate(session.plateNumber) !== normalizePlate(plate);
   }, [plate, session]);
 
@@ -183,11 +194,8 @@ export default function StaffExitPage() {
 
   const canExit = useMemo(() => {
     if (!paymentReady) return false;
-    // Can exit if plates match, OR if the mismatch has been approved by the manager
     return !hasMismatch || mismatchCase?.status === "APPROVED";
   }, [paymentReady, hasMismatch, mismatchCase]);
-
-  const handleSearch = () => runSearch();
 
   const handlePayCash = async () => {
     if (!session || !fee) return;
@@ -202,13 +210,13 @@ export default function StaffExitPage() {
   };
 
   const handleCreateMismatchCase = async () => {
-    if (!session || !deviceEvent?.detectedPlate) return;
+    if (!session || !plate) return;
     setIsCreatingMismatch(true);
     try {
       const createdCase = await staffSessionService.createMismatchCase({
         sessionId: session.id,
-        exitPlateNumber: deviceEvent.detectedPlate,
-        reason: `Thiết bị ${deviceEvent.gateCode} đọc ${deviceEvent.detectedPlate}, khác biển số vào ${session.plateNumber}.`,
+        exitPlateNumber: plate,
+        reason: `Biển ra ${plate} khác biển số vào ${session.plateNumber}.`,
       });
       setMismatchCase(createdCase);
       toast.success(`Đã tạo hồ sơ lệch biển số ${createdCase.caseCode}.`);
@@ -230,484 +238,403 @@ export default function StaffExitPage() {
       setSession(null);
       setFee(null);
       setDeviceEvent(null);
-      setIsCheckoutOpen(false);
+      setCardCode("");
+      setPlate("");
       toast.success("Đã hoàn tất lượt xe ra và giải phóng slot đỗ.");
     } catch (error) {
       toast.error(error.message || "Không thể xác nhận hoàn tất lượt xe ra.");
     }
   };
 
+  const changeAmount = useMemo(() => {
+    if (!fee || fee.paymentStatus === "PAID") return 0;
+    const received = Number(receivedAmount) || 0;
+    return Math.max(0, received - fee.totalAmount);
+  }, [fee, receivedAmount]);
+
   return (
-    <PageShell>
-      <PageHeader
-        eyebrow="Staff · Exit desk"
-        title="Cổng ra bãi xe"
-        description="Quét thẻ hoặc nhập biển số lúc ra để đối chiếu trực quan thông tin vào/ra, thu phí và hoàn tất lượt gửi."
-        icon={ReceiptText}
-        meta={deviceEvent ? <Badge variant="secondary" className="w-fit rounded-lg font-mono">{deviceEvent.gateCode} / {deviceEvent.scanType}</Badge> : null}
-      />
-
-      {deviceEvent && <DeviceBanner event={deviceEvent} />}
-
-      <div ref={mainContentRef} className="grid gap-4 lg:grid-cols-[1.35fr_0.65fr] mt-4">
-        {/* Left Column - Real-time camera feeds and snapshot comparison */}
-        <div className="flex flex-col gap-4">
-          <CameraComparisonFeed
-            entryImage={session?.entryVehicleImageDataUrl}
-            exitImage={deviceEvent?.vehicleImageDataUrl}
-          />
-
-          <div className="grid gap-3 md:grid-cols-2">
-            <ComparisonCard
-              title="Ảnh chụp biển số"
-              entryImage={session?.entryPlateImageDataUrl}
-              exitImage={deviceEvent?.plateImageDataUrl}
-            />
-            <ComparisonCard
-              title="Ảnh chân dung tài xế"
-              entryImage={session?.entryDriverImageDataUrl}
-              exitImage={deviceEvent?.driverImageDataUrl}
-            />
+    <div className="h-[calc(100dvh-11rem)] md:h-[calc(100dvh-7rem)] flex flex-col bg-transparent text-slate-800 font-sans selection:bg-indigo-500/30 overflow-hidden">
+      {/* HEADER */}
+      <header className="flex-none flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-4 pb-4 border-b border-slate-200 shrink-0">
+        <div className="flex items-center gap-4">
+          <div className="w-10 h-10 bg-indigo-600 flex items-center justify-center rounded-lg shadow-sm text-white font-black text-xl">
+            E
           </div>
-
-          <OCRComparisonCard
-            entryPlate={session?.plateNumber || ""}
-            exitPlate={plate}
-            setExitPlate={setPlate}
-            hasMismatch={hasMismatch}
-            confidence={deviceEvent?.plateConfidence}
-          />
+          <div>
+            <h1 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+              Xử lý ra xe
+              {deviceEvent && (
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 uppercase tracking-wider flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                  {deviceEvent.gateCode}
+                </span>
+              )}
+            </h1>
+            <p className="text-sm font-medium text-slate-500">Quét thẻ QR / nhập biển số / tìm phiên để xử lý ra xe</p>
+          </div>
         </div>
+        
+        {/* Progress Bar */}
+        <div className="hidden md:flex items-center gap-3 text-xs font-bold text-slate-400">
+          <div className="flex items-center gap-1.5 text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-full">
+            <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center">1</span> Tìm phiên
+          </div>
+          <div className="h-0.5 w-8 bg-slate-200"></div>
+          <div className={`flex items-center gap-1.5 ${session ? 'text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-full' : ''}`}>
+            <span className={`w-5 h-5 rounded-full flex items-center justify-center ${session ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-500'}`}>2</span> Xác nhận thông tin
+          </div>
+          <div className="h-0.5 w-8 bg-slate-200"></div>
+          <div className={`flex items-center gap-1.5 ${fee ? 'text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-full' : ''}`}>
+            <span className={`w-5 h-5 rounded-full flex items-center justify-center ${fee ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-500'}`}>3</span> Tính phí
+          </div>
+          <div className="h-0.5 w-8 bg-slate-200"></div>
+          <div className={`flex items-center gap-1.5 ${paymentReady ? 'text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-full' : ''}`}>
+            <span className={`w-5 h-5 rounded-full flex items-center justify-center ${paymentReady ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-500'}`}>4</span> Thanh toán
+          </div>
+          <div className="h-0.5 w-8 bg-slate-200"></div>
+          <div className="flex items-center gap-1.5">
+            <span className="w-5 h-5 rounded-full bg-slate-200 text-slate-500 flex items-center justify-center">5</span> Hoàn tất
+          </div>
+        </div>
+      </header>
 
-        {/* Right Column - Controls and Details */}
-        <div className="flex flex-col gap-4">
-          <Card className="app-card">
-            <CardHeader>
-              <CardTitle>Tra cứu phiên đỗ xe</CardTitle>
-              <CardDescription>Quét thẻ NFC lúc ra hoặc nhập mã thẻ để đối soát thông tin.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex flex-col gap-4">
-                <label className="flex flex-col gap-1.5">
-                  <span className="app-field-label">Mã thẻ NFC</span>
-                  <Input
-                    name="exit-card-code"
-                    autoComplete="off"
-                    spellCheck={false}
-                    value={cardCode}
-                    onChange={(event) => setCardCode(event.target.value.toUpperCase())}
-                    placeholder="CARD-0002…"
-                    className="font-mono font-bold"
-                  />
-                </label>
-                <Button onClick={handleSearch} disabled={isLoading} className="h-11">
-                  <Search aria-hidden="true" data-icon="inline-start" />
-                  Tìm phiên đỗ
-                </Button>
+      {/* MAIN GRID */}
+      <main className="flex-1 min-h-0 flex flex-col gap-4 lg:gap-6 pb-2">
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 lg:gap-6 min-h-0 flex-1">
+          
+          {/* COLUMN 1: Search & Confirmation */}
+          <div className="flex flex-col gap-4 lg:gap-6 min-h-0">
+            {/* 1. Search */}
+            <section className="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col overflow-hidden min-h-0">
+              <div className="p-3 border-b flex items-center gap-2 bg-white shrink-0">
+                <span className="flex items-center justify-center w-5 h-5 rounded-full bg-indigo-600 text-white font-bold text-[10px]">1</span>
+                <h3 className="font-bold text-slate-800 text-sm">Tìm phiên đang hoạt động</h3>
               </div>
-            </CardContent>
-          </Card>
-
-          {session && (
-            <Card className="app-card border-slate-300 animate-in fade-in duration-200">
-              <CardHeader className="pb-3">
-                <CardTitle className="flex items-center justify-between text-base">
-                  <span>Phiên đang xử lý</span>
-                  <Badge variant="outline" className={cn(
-                    "rounded-md text-[10px] uppercase font-bold",
-                    hasMismatch
-                      ? "border-amber-200 bg-amber-50 text-amber-800"
-                      : session.paymentStatus === "PAID"
-                      ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-                      : "border-sky-200 bg-sky-50 text-sky-800"
-                  )}>
-                    {hasMismatch ? "Lệch biển số" : session.paymentStatus === "PAID" ? "Đã thanh toán" : "Chờ thanh toán"}
-                  </Badge>
-                </CardTitle>
-                <CardDescription className="font-mono tabular-nums">{session.sessionCode}</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid gap-2 text-xs font-semibold">
-                  <div className="flex justify-between border-b pb-1">
-                    <span className="text-muted-foreground">Thẻ NFC:</span>
-                    <span className="font-mono">{session.cardCode}</span>
+              <div className="p-4 flex flex-col gap-4 overflow-y-auto min-h-0 flex-1">
+                <div className="flex bg-slate-100 p-1 rounded-lg shrink-0">
+                  <button className="flex-1 py-1.5 text-xs font-bold rounded-md bg-white text-indigo-600 shadow-sm flex items-center justify-center gap-1.5">
+                    <QrCode className="w-4 h-4" /> Quét QR thẻ
+                  </button>
+                  <button className="flex-1 py-1.5 text-xs font-bold rounded-md text-slate-500 hover:text-slate-700 flex items-center justify-center gap-1.5">
+                    <CarFront className="w-4 h-4" /> Biển số xe
+                  </button>
+                  <button className="flex-1 py-1.5 text-xs font-bold rounded-md text-slate-500 hover:text-slate-700 flex items-center justify-center gap-1.5">
+                    <Search className="w-4 h-4" /> Tìm kiếm phiên
+                  </button>
+                </div>
+                
+                <div className="flex-1 flex gap-4 min-h-0">
+                  <div className="flex-1 border-2 border-dashed border-indigo-200 bg-indigo-50/50 rounded-xl flex flex-col items-center justify-center text-center p-4">
+                    <QrCode className="w-12 h-12 text-indigo-400 mb-2" />
+                    <p className="font-bold text-sm text-indigo-900">Quét mã QR thẻ xe</p>
+                    <p className="text-[10px] text-indigo-600 font-medium">Đưa mã vào khung để quét</p>
                   </div>
-                  <div className="flex justify-between border-b pb-1">
-                    <span className="text-muted-foreground">Biển số vào:</span>
-                    <span className="font-mono">{session.plateNumber}</span>
-                  </div>
-                  <div className="flex justify-between border-b pb-1">
-                    <span className="text-muted-foreground">Biển số ra:</span>
-                    <span className="font-mono">{plate || "-- --"}</span>
+                  <div className="flex-[1.5] flex flex-col justify-center gap-2">
+                    <label className="text-xs font-bold text-slate-700">Hoặc nhập mã thẻ / biển số</label>
+                    <div className="relative">
+                      <Input 
+                        value={plate || cardCode}
+                        onChange={(e) => {
+                          const val = e.target.value.toUpperCase();
+                          if (val.startsWith("CARD") || val.startsWith("TH-")) {
+                            setCardCode(val);
+                            setPlate("");
+                          } else {
+                            setPlate(val);
+                            setCardCode("");
+                          }
+                        }}
+                        placeholder="Nhập mã thẻ hoặc biển số"
+                        className="pr-10 border-slate-200"
+                      />
+                      <Button size="icon" variant="ghost" onClick={() => runSearch()} className="absolute right-1 top-1 h-7 w-7 text-indigo-600 hover:bg-indigo-50">
+                        <Search className="w-4 h-4" />
+                      </Button>
+                    </div>
+                    <p className="text-[10px] text-slate-400 font-medium mt-1">Gợi ý: 30F12345, TH-001122</p>
                   </div>
                 </div>
+              </div>
+            </section>
 
+            {/* 4. Confirmation */}
+            <section className="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col overflow-hidden min-h-0">
+              <div className="p-3 border-b flex items-center gap-2 bg-white shrink-0">
+                <span className="flex items-center justify-center w-5 h-5 rounded-full bg-indigo-600 text-white font-bold text-[10px]">4</span>
+                <h3 className="font-bold text-slate-800 text-sm">Xác nhận thông tin ra xe</h3>
+              </div>
+              <div className="p-4 flex flex-col gap-4 overflow-y-auto min-h-0 flex-1">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-600">Biển số thực tế (nếu khác)</label>
+                    <div className="relative">
+                      <Input value={plate} onChange={(e) => setPlate(e.target.value.toUpperCase())} className="font-bold uppercase pr-8" placeholder="Nhập biển số thực tế" />
+                      <Camera className="w-4 h-4 absolute right-3 top-2.5 text-slate-400" />
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-600">Ghi chú (nếu có)</label>
+                    <Input placeholder="Nhập ghi chú" className="text-sm" />
+                  </div>
+                </div>
+                
                 {hasMismatch && (
-                  <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-2.5 text-xs text-amber-900">
-                    <p className="font-bold flex items-center gap-1.5 mb-1.5">
-                      <ShieldAlert aria-hidden="true" className="size-3.5 text-amber-700" />
-                      Lệch biển số ra và biển số vào
-                    </p>
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 flex flex-col gap-2">
+                    <div className="flex items-start gap-2">
+                      <ShieldAlert className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                      <div className="flex-1">
+                        <p className="text-xs font-bold text-amber-900">Cảnh báo sai lệch biển số!</p>
+                        <p className="text-[10px] text-amber-700">Biển số lúc ra ({plate}) khác với lúc vào ({session?.plateNumber}).</p>
+                      </div>
+                    </div>
                     {mismatchCase ? (
-                      <span className="font-mono text-[10px] font-bold bg-white/80 px-1.5 py-0.5 rounded border border-amber-300 block text-center">
-                        Đã tạo hồ sơ: {mismatchCase.caseCode} ({mismatchCase.status})
-                      </span>
+                      <Badge variant="outline" className="w-fit bg-white border-amber-300 text-amber-800 text-[10px]">
+                        Trạng thái xử lý: {mismatchCase.status}
+                      </Badge>
                     ) : (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={handleCreateMismatchCase}
-                        disabled={isCreatingMismatch}
-                        className="w-full h-8 text-[11px] font-bold border-amber-300 bg-white hover:bg-amber-100 text-amber-900"
-                      >
-                        <AlertTriangle aria-hidden="true" className="size-3 mr-1" />
-                        Tạo hồ sơ sự cố lệch biển
+                      <Button size="sm" onClick={handleCreateMismatchCase} disabled={isCreatingMismatch} className="w-fit h-7 text-[10px] bg-amber-100 hover:bg-amber-200 text-amber-900 font-bold border-none shadow-none">
+                        Tạo yêu cầu xử lý
                       </Button>
                     )}
                   </div>
                 )}
 
-                <Button onClick={() => setIsCheckoutOpen(true)} className="w-full h-11 text-sm font-bold shadow-sm">
-                  <CreditCard aria-hidden="true" className="size-4 mr-1.5" />
-                  Tiến hành thanh toán & Xe ra
-                </Button>
-              </CardContent>
-            </Card>
-          )}
-        </div>
-      </div>
-
-      <CheckoutDialog
-        open={isCheckoutOpen}
-        onOpenChange={setIsCheckoutOpen}
-        session={session}
-        fee={fee}
-        hasMismatch={hasMismatch}
-        mismatchCase={mismatchCase}
-        isCreatingMismatch={isCreatingMismatch}
-        handleCreateMismatchCase={handleCreateMismatchCase}
-        receivedAmount={receivedAmount}
-        setReceivedAmount={setReceivedAmount}
-        handlePayCash={handlePayCash}
-        handleCompleteExit={handleCompleteExit}
-        canExit={canExit}
-      />
-
-      <ReceiptDialog receipt={receipt} setReceipt={setReceipt} />
-    </PageShell>
-  );
-}
-
-function DeviceBanner({ event }) {
-  return (
-    <div className="flex flex-col gap-2 rounded-lg border status-info p-4 text-sm md:flex-row md:items-center md:justify-between">
-      <div className="flex items-start gap-3">
-        <RadioTower aria-hidden="true" className="mt-0.5 shrink-0 text-sky-700" />
-        <div>
-          <p className="font-black">Thiết bị cổng ra: {event.gateCode}</p>
-          <p className="text-xs font-semibold text-sky-800">
-            Quét lúc <span className="font-mono tabular-nums">{new Date(event.capturedAt).toLocaleTimeString("vi-VN")}</span> bằng {event.scanType}
-          </p>
-        </div>
-      </div>
-      <div className="font-mono text-xs font-black rounded bg-sky-100/80 px-2 py-1 text-sky-900">
-        {event.cardCode || event.qrToken || event.detectedPlate || "No payload"}
-      </div>
-    </div>
-  );
-}
-
-function CameraComparisonFeed({ entryImage, exitImage }) {
-  return (
-    <Card className="app-card">
-      <CardHeader className="pb-3">
-        <CardTitle className="flex items-center gap-2">
-          <Camera aria-hidden="true" className="size-4" />
-          Camera làn xe (Đối chiếu toàn cảnh)
-        </CardTitle>
-        <CardDescription>So sánh xe lúc vào bãi và lúc ra bãi để kiểm tra màu sắc, kiểu dáng.</CardDescription>
-      </CardHeader>
-      <CardContent className="pt-0">
-        <div className="grid gap-4 md:grid-cols-2">
-          {/* Entry Feed */}
-          <div className="flex flex-col gap-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-black uppercase tracking-wider text-muted-foreground">Ảnh lúc vào bãi</span>
-              {entryImage && <Badge variant="outline" className="text-[10px] border-emerald-200 bg-emerald-50 text-emerald-800">Đã lưu</Badge>}
-            </div>
-            <div className="flex aspect-[2/1] items-center justify-center overflow-hidden rounded-lg border bg-slate-950 text-slate-400">
-              {entryImage ? (
-                <img src={entryImage} alt="Camera làn vào" width="480" height="240" className="h-full w-full object-cover" />
-              ) : (
-                <span className="text-xs font-bold text-slate-500">Không có dữ liệu ảnh xe vào…</span>
-              )}
-            </div>
-          </div>
-          {/* Exit Feed */}
-          <div className="flex flex-col gap-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-black uppercase tracking-wider text-muted-foreground">Ảnh lúc ra bãi (Hiện tại)</span>
-              {exitImage && <Badge variant="outline" className="text-[10px] border-sky-200 bg-sky-50 text-sky-800 animate-pulse">Live</Badge>}
-            </div>
-            <div className="flex aspect-[2/1] items-center justify-center overflow-hidden rounded-lg border bg-slate-950 text-slate-400">
-              {exitImage ? (
-                <img src={exitImage} alt="Camera làn ra" width="480" height="240" className="h-full w-full object-cover" />
-              ) : (
-                <span className="text-xs font-bold text-slate-500 animate-pulse">Chờ tín hiệu từ camera exit…</span>
-              )}
-            </div>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function ComparisonCard({ title, entryImage, exitImage }) {
-  return (
-    <Card className="app-card">
-      <CardHeader className="pb-2">
-        <CardTitle className="text-xs font-black uppercase tracking-wider text-muted-foreground">{title}</CardTitle>
-      </CardHeader>
-      <CardContent className="pt-0">
-        <div className="grid gap-2 grid-cols-2">
-          {/* Entry column */}
-          <div className="flex flex-col gap-1">
-            <span className="text-[9px] font-black uppercase tracking-wide text-muted-foreground">Lúc vào</span>
-            <div className="flex aspect-[2/1] items-center justify-center overflow-hidden rounded-lg border bg-slate-950 text-slate-400">
-              {entryImage ? (
-                <img src={entryImage} alt={`${title} lúc vào`} width="240" height="120" className="h-full w-full object-cover" />
-              ) : (
-                <span className="text-[9px] font-bold text-slate-500">Không có ảnh</span>
-              )}
-            </div>
-          </div>
-          {/* Exit column */}
-          <div className="flex flex-col gap-1">
-            <span className="text-[9px] font-black uppercase tracking-wide text-muted-foreground">Lúc ra</span>
-            <div className="flex aspect-[2/1] items-center justify-center overflow-hidden rounded-lg border bg-slate-950 text-slate-400">
-              {exitImage ? (
-                <img src={exitImage} alt={`${title} lúc ra`} width="240" height="120" className="h-full w-full object-cover" />
-              ) : (
-                <span className="text-[9px] font-bold text-slate-500">Chờ thiết bị</span>
-              )}
-            </div>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function OCRComparisonCard({ entryPlate, exitPlate, setExitPlate, hasMismatch, confidence }) {
-  return (
-    <Card className="app-card">
-      <CardHeader className="pb-3">
-        <CardTitle className="text-sm font-bold">Đối soát biển số xe</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="grid gap-4 sm:grid-cols-2 items-center">
-          <div className="flex flex-col gap-2 p-3 rounded-lg border bg-muted/30">
-            <div className="flex items-center justify-between text-xs font-bold text-muted-foreground uppercase">
-              <span>Biển số vào</span>
-              <span>Đăng ký</span>
-            </div>
-            <div className="font-mono text-xl font-black text-center py-2 bg-background border rounded">{entryPlate || "-- --"}</div>
-          </div>
-
-          <div className="flex flex-col gap-2 p-3 rounded-lg border bg-muted/30">
-            <div className="flex items-center justify-between text-xs font-bold text-muted-foreground uppercase">
-              <span>Biển số ra</span>
-              <span className="font-mono tabular-nums">{confidence ? `OCR ${confidence}%` : "Nhập tay"}</span>
-            </div>
-            <Input
-              name="exit-plate-correction"
-              value={exitPlate}
-              onChange={(event) => setExitPlate(event.target.value.toUpperCase())}
-              placeholder="Chờ quét / Nhập tay…"
-              autoComplete="off"
-              spellCheck={false}
-              className={`font-mono text-xl font-black text-center h-11 border rounded focus-visible:ring-2 ${
-                hasMismatch
-                  ? "bg-red-50 text-red-700 border-red-200 focus-visible:ring-red-300"
-                  : "bg-emerald-50 text-emerald-800 border-emerald-200 focus-visible:ring-emerald-300"
-              }`}
-            />
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function CheckoutDialog({
-  open,
-  onOpenChange,
-  session,
-  fee,
-  hasMismatch,
-  mismatchCase,
-  isCreatingMismatch,
-  handleCreateMismatchCase,
-  receivedAmount,
-  setReceivedAmount,
-  handlePayCash,
-  handleCompleteExit,
-  canExit,
-}) {
-  if (!session || !fee) return null;
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl">
-        <DialogHeader>
-          <DialogTitle className="text-lg font-black flex items-center gap-2">
-            <CreditCard aria-hidden="true" className="size-5 text-primary" />
-            Thanh toán & Hoàn tất lượt xe ra
-          </DialogTitle>
-          <DialogDescription className="font-mono text-xs">
-            Mã phiên: {session.sessionCode}
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="grid gap-6 md:grid-cols-2 py-2">
-          {/* Left Side: Session Entry Details */}
-          <div className="space-y-4">
-            <h4 className="text-xs font-black uppercase tracking-wider text-muted-foreground">Thông tin xe vào</h4>
-            <div className="grid gap-2.5 rounded-lg border bg-muted/20 p-3.5 text-xs font-semibold">
-              <DetailTile label="Biển số vào" value={session.plateNumber} mono />
-              <DetailTile label="Thẻ NFC" value={session.cardCode} mono />
-              <DetailTile label="Loại xe" value={session.vehicleTypeName} />
-              <DetailTile label="Khách hàng" value={session.customerType === "MONTHLY" ? "Vé tháng" : "Vãng lai"} />
-              <div className="col-span-2 border-t pt-2 mt-1">
-                <p className="text-[10px] text-muted-foreground mb-0.5">Thời điểm vào bãi</p>
-                <p className="font-mono text-foreground">{formatDateTime(session.entryTime)}</p>
-              </div>
-              <div className="col-span-2">
-                <p className="text-[10px] text-muted-foreground mb-0.5">Vị trí đỗ xe</p>
-                <p className="text-foreground">{session.floorCode} / {session.areaCode} / {session.slotCode}</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Right Side: Payment and exit action */}
-          <div className="space-y-4">
-            <h4 className="text-xs font-black uppercase tracking-wider text-muted-foreground">Thanh toán & Phí đỗ xe</h4>
-            <div className="flex flex-col gap-4">
-              <div className="rounded-lg border bg-muted/40 p-4 font-mono text-sm">
-                <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground text-xs">Thời lượng đỗ</span>
-                  <strong className="tabular-nums">{fee.durationHours} giờ</strong>
+                <div className="flex items-center gap-6 mt-2">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <div className="w-4 h-4 rounded border border-indigo-600 bg-indigo-600 flex items-center justify-center text-white"><Check className="w-3 h-3" /></div>
+                    <span className="text-xs font-bold text-slate-700">Xác nhận xe đã rời bãi</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer opacity-50">
+                    <div className="w-4 h-4 rounded border border-slate-300 bg-white"></div>
+                    <span className="text-xs font-bold text-slate-600">Không in hóa đơn</span>
+                  </label>
                 </div>
-                <div className="mt-2 flex items-center justify-between">
-                  <span className="text-muted-foreground text-xs">Đơn giá áp dụng</span>
-                  <strong className="tabular-nums">{formatVND(fee.rate)}</strong>
-                </div>
-                <div className="mt-3 flex items-center justify-between border-t pt-3 text-sm font-bold">
-                  <span>Tổng tiền thu</span>
-                  <span className="text-xl font-black text-primary tabular-nums">{formatVND(fee.totalAmount)}</span>
-                </div>
-              </div>
 
-              {!fee.paymentRequired ? (
-                <Badge variant="secondary" className="justify-center rounded-md py-2.5 border border-emerald-100 bg-emerald-50 text-emerald-800 font-bold text-sm">
-                  <ShieldCheck aria-hidden="true" data-icon="inline-start" className="size-4 mr-1 text-emerald-700" />
-                  {fee.waiveReason || "Không cần thanh toán"}
-                </Badge>
-              ) : (
-                <label className="flex flex-col gap-2">
-                  <span className="app-field-label text-xs">Số tiền khách đưa (VND)</span>
-                  <Input
-                    name="modal-received-amount"
-                    autoComplete="off"
-                    value={receivedAmount}
-                    onChange={(event) => setReceivedAmount(event.target.value)}
-                    inputMode="numeric"
-                    className="font-mono text-lg font-bold"
-                  />
-                  <Button variant="outline" onClick={handlePayCash} className="h-10 border-slate-300">
-                    <CreditCard aria-hidden="true" className="size-4 mr-1.5" />
-                    Xác nhận thu tiền mặt
-                  </Button>
-                </label>
-              )}
-
-              {hasMismatch && (
-                <div className="rounded-lg border status-warning p-3 text-[11px] font-semibold text-amber-800 bg-amber-50 border-amber-100">
-                  <p className="flex items-center gap-1 mb-1 font-bold">
-                    <ShieldAlert aria-hidden="true" className="size-3.5 text-amber-700" />
-                    Cảnh báo: Biển số bị lệch
-                  </p>
-                  {mismatchCase ? (
-                    <span>Hồ sơ sự cố: {mismatchCase.caseCode} ({mismatchCase.status}). Cần Quản lý duyệt trước khi cho ra.</span>
-                  ) : (
-                    <div className="space-y-2">
-                      <p>Biển số ra không khớp biển số vào. Vui lòng đóng modal đối soát hình ảnh hoặc bấm bên dưới để tạo sự cố.</p>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={handleCreateMismatchCase}
-                        disabled={isCreatingMismatch}
-                        className="w-full h-8 text-[11px] font-bold border-amber-300 hover:bg-amber-100 text-amber-900 bg-white"
-                      >
-                        Tạo hồ sơ sự cố lệch biển
-                      </Button>
+                <div className="grid grid-cols-2 gap-4 mt-auto pt-4 border-t border-slate-100">
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Nhân viên xử lý</label>
+                    <div className="bg-slate-50 border rounded px-3 py-2 text-xs font-bold text-slate-700 flex items-center gap-2">
+                      <div className="w-4 h-4 rounded-full bg-indigo-100 flex items-center justify-center"><CheckCircle2 className="w-3 h-3 text-indigo-600" /></div>
+                      Nhân viên Trực
                     </div>
-                  )}
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Thời gian ra (hiện tại)</label>
+                    <div className="bg-slate-50 border rounded px-3 py-2 text-xs font-bold text-slate-700 flex items-center gap-2">
+                      <Clock3 className="w-3.5 h-3.5 text-slate-400" />
+                      {currentTime}
+                    </div>
+                  </div>
                 </div>
-              )}
-            </div>
+              </div>
+            </section>
           </div>
+
+          {/* COLUMN 2: Session Info & Images */}
+          <div className="flex flex-col gap-4 lg:gap-6 min-h-0">
+            {/* 2. Session Info */}
+            <section className="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col overflow-hidden min-h-0">
+              <div className="p-3 border-b flex items-center justify-between bg-white shrink-0">
+                <div className="flex items-center gap-2">
+                  <span className="flex items-center justify-center w-5 h-5 rounded-full bg-indigo-600 text-white font-bold text-[10px]">2</span>
+                  <h3 className="font-bold text-slate-800 text-sm">Thông tin phiên</h3>
+                </div>
+                {session && <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px]">Đang hoạt động</Badge>}
+              </div>
+              
+              <div className="p-4 flex flex-col gap-4 overflow-y-auto min-h-0 flex-1">
+                {session ? (
+                  <>
+                    <div className="flex gap-4 p-3 bg-slate-50 rounded-lg border border-slate-100">
+                      <div className="w-12 h-12 bg-white rounded-lg border shadow-sm flex flex-col items-center justify-center shrink-0">
+                        <CarFront className="w-5 h-5 text-slate-600" />
+                        <span className="text-[9px] font-bold text-slate-400 mt-0.5">{session.vehicleTypeName}</span>
+                      </div>
+                      <div className="flex-1 flex flex-col justify-center">
+                        <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Biển số</span>
+                        <span className="text-lg font-black text-slate-900">{session.plateNumber}</span>
+                      </div>
+                      <div className="flex-1 flex flex-col justify-center items-end text-right">
+                        <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Thời gian vào</span>
+                        <span className="text-sm font-bold text-slate-800">{formatDateTime(session.entryTime)}</span>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-y-4 gap-x-2 text-xs">
+                      <div>
+                        <span className="text-slate-500 mb-1 block">Mã thẻ</span>
+                        <span className="font-bold font-mono">{session.cardCode}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 mb-1 block">Cổng vào</span>
+                        <span className="font-bold">{session.entryGateCode || "GATE-IN-01"}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 mb-1 block">Loại khách</span>
+                        <Badge variant="outline" className="bg-indigo-50 text-indigo-700 border-indigo-200 text-[10px]">{session.customerType === 'MONTHLY' ? 'Thẻ tháng' : 'Vãng lai'}</Badge>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 mb-1 block">Vị trí đỗ</span>
+                        <span className="font-bold">{session.floorCode} - {session.areaCode}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 mb-1 block">Tên khách</span>
+                        <span className="font-bold">{session.customerType === 'MONTHLY' ? 'Khách hàng A' : 'Khách vãng lai'}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 mb-1 block">Trạng thái phí</span>
+                        <Badge variant="outline" className={`text-[10px] ${session.paymentStatus === 'PAID' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
+                          {session.paymentStatus === 'PAID' ? 'Đã thanh toán' : 'Chưa thanh toán'}
+                        </Badge>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex-1 flex items-center justify-center text-sm font-medium text-slate-400 italic">
+                    Chưa chọn phiên đỗ xe
+                  </div>
+                )}
+                
+                <div className="mt-auto bg-amber-50 border border-amber-200 rounded-md p-2 flex items-start gap-2 text-amber-800 text-xs font-medium">
+                  <Info className="w-4 h-4 shrink-0 text-amber-600 mt-0.5" />
+                  <p>Vui lòng kiểm tra kỹ thông tin trước khi tính phí.</p>
+                </div>
+              </div>
+            </section>
+
+            {/* 5. Camera/Images */}
+            <section className="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col overflow-hidden min-h-0">
+              <div className="p-3 border-b flex items-center gap-2 bg-white shrink-0">
+                <span className="flex items-center justify-center w-5 h-5 rounded-full bg-indigo-600 text-white font-bold text-[10px]">5</span>
+                <h3 className="font-bold text-slate-800 text-sm">Hình ảnh đối chiếu</h3>
+              </div>
+              <div className="p-4 flex flex-col gap-3 overflow-y-auto min-h-0 flex-1">
+                <p className="text-xs font-bold text-slate-500 mb-1">Ảnh xe lúc vào (Lưu trữ)</p>
+                {session?.entryVehicleImageDataUrl ? (
+                  <div className="w-full h-32 bg-slate-100 rounded-lg border overflow-hidden shrink-0">
+                    <img src={session.entryVehicleImageDataUrl} className="w-full h-full object-cover cursor-pointer" onClick={() => setPreviewImage({ title: "Ảnh xe vào", image: session.entryVehicleImageDataUrl })}/>
+                  </div>
+                ) : (
+                  <div className="w-full h-32 bg-slate-50 border border-dashed border-slate-300 rounded-lg flex flex-col items-center justify-center text-slate-400 gap-2 shrink-0">
+                    <ImageIcon className="w-6 h-6" />
+                    <span className="text-[10px] font-bold">Không có ảnh vào</span>
+                  </div>
+                )}
+
+                <p className="text-xs font-bold text-slate-500 mb-1 mt-2">Ảnh biển số lúc ra (Hiện tại)</p>
+                {deviceEvent?.plateImageDataUrl ? (
+                  <div className="w-full flex-1 bg-slate-100 rounded-lg border overflow-hidden min-h-[80px]">
+                    <img src={deviceEvent.plateImageDataUrl} className="w-full h-full object-cover cursor-pointer" onClick={() => setPreviewImage({ title: "Ảnh biển số ra", image: deviceEvent.plateImageDataUrl })}/>
+                  </div>
+                ) : (
+                  <div className="w-full flex-1 bg-slate-50 border border-dashed border-slate-300 rounded-lg flex flex-col items-center justify-center text-slate-400 gap-2 min-h-[80px]">
+                    <Camera className="w-6 h-6 text-slate-300" />
+                    <span className="text-[10px] font-bold">Chờ camera cổng ra...</span>
+                  </div>
+                )}
+              </div>
+            </section>
+          </div>
+
+          {/* COLUMN 3: Fee & Payment */}
+          <div className="flex flex-col gap-4 lg:gap-6 min-h-0">
+            {/* 3. Fee Summary */}
+            <section className="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col overflow-hidden min-h-0">
+              <div className="p-3 border-b flex items-center gap-2 bg-white shrink-0">
+                <span className="flex items-center justify-center w-5 h-5 rounded-full bg-indigo-600 text-white font-bold text-[10px]">3</span>
+                <h3 className="font-bold text-slate-800 text-sm">Tóm tắt phí</h3>
+              </div>
+              <div className="p-4 flex flex-col gap-4 overflow-y-auto min-h-0 flex-1">
+                {fee ? (
+                  <>
+                    <div className="space-y-3">
+                      <div className="flex justify-between items-center text-xs">
+                        <span className="text-slate-500 font-medium">Phí giữ xe</span>
+                        <span className="font-bold">{formatVND(fee.totalAmount)}</span>
+                      </div>
+                      <div className="flex justify-between items-center text-xs">
+                        <span className="text-slate-500 font-medium">Giảm giá</span>
+                        <span className="font-bold">- 0 đ</span>
+                      </div>
+                      <div className="flex justify-between items-center text-xs pb-3 border-b border-slate-100">
+                        <span className="text-slate-500 font-medium">Phụ phí</span>
+                        <span className="font-bold">0 đ</span>
+                      </div>
+                      
+                      <div className="flex justify-between items-center pt-1">
+                        <span className="text-sm font-black text-slate-800">Tổng tiền</span>
+                        <span className="text-2xl font-black text-indigo-600">{formatVND(fee.totalAmount)}</span>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 bg-slate-50 border rounded-lg p-3 space-y-2">
+                      <div className="flex justify-between items-center text-[11px]">
+                        <span className="flex items-center gap-1.5 text-slate-500"><Clock3 className="w-3.5 h-3.5" /> Thời gian đỗ</span>
+                        <span className="font-bold">{fee.durationHours} giờ</span>
+                      </div>
+                      <div className="flex justify-between items-center text-[11px]">
+                        <span className="text-slate-500 ml-5">Đơn giá áp dụng</span>
+                        <span className="font-bold">20.000 đ / giờ</span>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex-1 flex items-center justify-center text-sm font-medium text-slate-400 italic">
+                    Chờ tính phí...
+                  </div>
+                )}
+              </div>
+            </section>
+
+            {/* 6. Payment */}
+            <section className="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col overflow-hidden min-h-0">
+              <div className="p-3 border-b flex items-center gap-2 bg-white shrink-0">
+                <span className="flex items-center justify-center w-5 h-5 rounded-full bg-indigo-600 text-white font-bold text-[10px]">6</span>
+                <h3 className="font-bold text-slate-800 text-sm">Thanh toán</h3>
+              </div>
+              <div className="p-4 flex flex-col gap-4 overflow-y-auto min-h-0 flex-1">
+                <div className="flex bg-slate-100 p-1 rounded-lg shrink-0">
+                  <button className="flex-1 py-1.5 text-xs font-bold rounded-md bg-white shadow-sm text-emerald-600 border border-emerald-200">Tiền mặt</button>
+                  <button className="flex-1 py-1.5 text-xs font-bold rounded-md text-slate-500 hover:text-slate-700">Miễn phí</button>
+                </div>
+                
+                <div className="space-y-3 flex-1">
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-600 block mb-1">Khách trả</label>
+                    <div className="relative">
+                      <Input value={receivedAmount} onChange={e => setReceivedAmount(e.target.value)} className="font-bold text-right pr-8 h-10" />
+                      <span className="absolute right-3 top-2.5 text-slate-400 font-bold text-sm">đ</span>
+                    </div>
+                  </div>
+                  
+                  <div className="flex justify-between items-center bg-emerald-50 border border-emerald-100 rounded-lg p-3">
+                    <span className="text-xs font-bold text-emerald-800">Tiền thừa</span>
+                    <span className="text-sm font-black text-emerald-600">{formatVND(changeAmount)}</span>
+                  </div>
+                </div>
+
+                <div className="mt-auto space-y-2 shrink-0">
+                  <Button 
+                    onClick={session?.paymentStatus === 'PAID' ? handleCompleteExit : handlePayCash} 
+                    disabled={!canExit && session?.paymentStatus !== 'PAID'} 
+                    className="w-full h-11 bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-sm"
+                  >
+                    <CheckCircle2 className="w-4 h-4 mr-1.5" /> 
+                    {session?.paymentStatus === 'PAID' ? 'Hoàn tất & Xe ra' : 'Xác nhận thanh toán'}
+                  </Button>
+                  <Button variant="outline" className="w-full h-10 text-xs font-bold text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200">
+                    <XCircle className="w-3.5 h-3.5 mr-1.5" /> Hủy giao dịch
+                  </Button>
+                </div>
+              </div>
+            </section>
+          </div>
+          
         </div>
 
-        <DialogFooter className="border-t pt-4">
-          <Button variant="outline" onClick={() => onOpenChange(false)} className="w-full sm:w-auto">
-            Quay lại đối soát
-          </Button>
-          <Button onClick={handleCompleteExit} disabled={!canExit} className="w-full sm:w-auto">
-            <ReceiptText aria-hidden="true" className="size-4 mr-1.5" />
-            Xác nhận xe ra bãi
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
+        </main>
 
-function ReceiptDialog({ receipt, setReceipt }) {
-  return (
-    <Dialog open={Boolean(receipt)} onOpenChange={(open) => !open && setReceipt(null)}>
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Biên lai đỗ xe thành công</DialogTitle>
-          <DialogDescription>Thẻ và vị trí đỗ đã được giải phóng trên hệ thống.</DialogDescription>
-        </DialogHeader>
-        {receipt && (
-          <div className="rounded-lg border bg-muted/20 p-4 font-mono text-sm space-y-2.5">
-            <ReceiptLine label="Mã biên lai" value={receipt.receiptCode} />
-            <ReceiptLine label="Biển số xe" value={receipt.plateNumber} />
-            <ReceiptLine label="Mã thẻ NFC" value={receipt.cardCode} />
-            <ReceiptLine label="Thời điểm vào" value={formatDateTime(receipt.entryTime)} />
-            <ReceiptLine label="Thời điểm ra" value={formatDateTime(receipt.exitTime)} />
-            <div className="mt-4 flex justify-between border-t pt-3 text-base font-bold">
-              <span>Tổng tiền thanh toán</span>
-              <span className="text-lg text-primary tabular-nums">{formatVND(receipt.totalAmount)}</span>
-            </div>
-          </div>
-        )}
-        <DialogFooter>
-          <Button onClick={() => setReceipt(null)} className="w-full sm:w-auto">Đóng biên lai</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function ReceiptLine({ label, value }) {
-  return (
-    <div className="flex justify-between text-xs font-medium border-b border-dashed border-slate-200 pb-2">
-      <span className="text-muted-foreground">{label}</span>
-      <span className="font-bold text-foreground">{value}</span>
+      <ImagePreviewDialog preview={previewImage} onOpenChange={(open) => !open && setPreviewImage(null)} />
     </div>
   );
 }

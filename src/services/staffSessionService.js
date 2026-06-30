@@ -48,5 +48,11 @@ export const staffSessionService = {
     });
     if (response.success) return response.data;
     throw new Error(response.message || "Không thể tạo báo cáo mất thẻ.");
+  },
+
+  // TODO: F025 - Check Monthly Pass Validity (Chưa được Backend hoàn thiện)
+  checkMonthlyPass: async (plate) => {
+    // Return mock data for now
+    return false;
   }
 };

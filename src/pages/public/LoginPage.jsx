@@ -1,18 +1,42 @@
 import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { User, Lock, Eye, EyeOff, ShieldAlert, CheckCircle2, ChevronRight } from "lucide-react";
-import bgImage from "@/assets/parking_bg.png";
+import { useNavigate, Link } from "react-router-dom";
+import { User, Lock, Eye, EyeOff, ShieldAlert, ShieldCheck, BarChart3, Clock, Shield } from "lucide-react";
 import { authService } from "@/services/authService";
 import { Button } from "@/components/ui/button";
 import { USER_ROLES } from "@/constants";
-import { DEMO_ACCOUNTS } from "@/mocks/demoAccounts";
 import { Input } from "@/components/ui/input";
-import { Card } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Alert } from "@/components/ui/alert";
+import AuthSplitLayout from "@/components/layout/AuthSplitLayout";
+
+const LOGIN_FEATURES = [
+  {
+    icon: "P",
+    title: "Quản lý bãi xe thông minh",
+    description: "Theo dõi sức chứa và tình trạng chỗ trống theo thời gian thực."
+  },
+  {
+    icon: <Shield size={20} />,
+    title: "An toàn & bảo mật",
+    description: "Hệ thống giám sát 24/7, dữ liệu được bảo mật tuyệt đối."
+  },
+  {
+    icon: <Clock size={20} />,
+    title: "Tiện lợi & nhanh chóng",
+    description: "Đặt chỗ, thanh toán và kiểm soát ra vào dễ dàng."
+  },
+  {
+    icon: <BarChart3 size={20} />,
+    title: "Báo cáo & thống kê",
+    description: "Cung cấp báo cáo chi tiết, hỗ trợ ra quyết định hiệu quả."
+  }
+];
 
 export default function LoginPage({ onLoginSuccess }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
@@ -26,7 +50,6 @@ export default function LoginPage({ onLoginSuccess }) {
       const { token, user } = await authService.login(username, password);
       onLoginSuccess(token, user);
 
-      // Điều hướng dựa trên vai trò (role) của tài khoản
       if (user.role === USER_ROLES.ADMIN) {
         navigate("/admin/users");
       } else if (user.role === USER_ROLES.MANAGER) {
@@ -43,163 +66,112 @@ export default function LoginPage({ onLoginSuccess }) {
     }
   };
 
-  const handleQuickLogin = (demoUsername) => {
-    setUsername(demoUsername);
-    setPassword("password123");
-    setError("");
-  };
-
-  // demoAccounts đã được di chuyển sang src/constants/index.js dưới tên DEMO_ACCOUNTS
-
   return (
-    <div 
-      className="relative flex min-h-screen items-center justify-center bg-slate-950 px-4 py-12 overflow-hidden font-sans"
-      style={{
-        backgroundImage: `url(${bgImage})`,
-        backgroundSize: "cover",
-        backgroundPosition: "center",
-      }}
+    <AuthSplitLayout
+      title="Chào mừng trở lại với"
+      heroDescription="Giải pháp bãi đỗ xe thông minh, hiện đại và an toàn mang đến trải nghiệm tiện lợi cho mọi khách hàng."
+      featureItems={LOGIN_FEATURES}
     >
-      {/* Lớp phủ gradient tạo chiều sâu và bảo đảm độ tương phản */}
-      <div className="absolute inset-0 bg-gradient-to-tr from-slate-950 via-slate-950/85 to-slate-900/40 z-0"></div>
+      <div className="flex flex-col items-center mb-8">
+        <div className="w-14 h-14 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center mb-5">
+          <Lock size={28} strokeWidth={2} />
+        </div>
+        <h2 className="text-3xl font-black text-gray-900 mb-2">Đăng nhập</h2>
+        <p className="text-center text-sm text-gray-500">
+          Vui lòng đăng nhập để truy cập hệ thống quản lý<br />SWP Building Smart Parking.
+        </p>
+      </div>
 
-      {/* Trang trí vòng tròn neon mờ ảo phía sau card */}
-      <div className="absolute top-1/4 left-1/4 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl z-0 pointer-events-none"></div>
-      <div className="absolute bottom-1/4 right-1/4 translate-x-1/2 translate-y-1/2 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl z-0 pointer-events-none"></div>
+      {error && (
+        <Alert variant="destructive">{error}</Alert>
+      )}
 
-      <Card className="relative w-full max-w-[420px] rounded-2xl border border-white/10 bg-slate-900/60 backdrop-blur-xl p-6 sm:p-8 shadow-[0_8px_32px_rgba(0,0,0,0.5)] z-10 transition-all duration-300 hover:border-white/15">
-        
-        {/* Header/Logo */}
-        <div 
-          onClick={() => navigate("/")}
-          className="flex flex-col items-center mb-8 cursor-pointer group"
-          title="Về trang chính cổng thông tin"
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="relative group">
+          <span className="absolute inset-y-0 left-0 flex items-center pl-4 text-gray-400 group-focus-within:text-blue-600 transition-colors z-10">
+            <User size={18} />
+          </span>
+          <Input
+            type="text"
+            required
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            className="pl-11 pr-4 py-6 text-sm text-gray-900 placeholder-gray-400 bg-white border-gray-200 rounded-xl focus-visible:ring-1 focus-visible:ring-blue-600 focus-visible:border-blue-600 shadow-sm"
+            placeholder="Tên đăng nhập / Email / Số điện thoại"
+          />
+        </div>
+
+        <div className="relative group">
+          <span className="absolute inset-y-0 left-0 flex items-center pl-4 text-gray-400 group-focus-within:text-blue-600 transition-colors z-10">
+            <Lock size={18} />
+          </span>
+          <Input
+            type={showPassword ? "text" : "password"}
+            required
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="pl-11 pr-11 py-6 text-sm text-gray-900 placeholder-gray-400 bg-white border-gray-200 rounded-xl focus-visible:ring-1 focus-visible:ring-blue-600 focus-visible:border-blue-600 shadow-sm"
+            placeholder="Mật khẩu"
+          />
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            onClick={() => setShowPassword(!showPassword)}
+            className="absolute inset-y-0 right-0 flex items-center pr-4 pl-4 text-gray-400 hover:text-gray-600 transition-colors cursor-pointer z-10 bg-transparent hover:bg-transparent"
+          >
+            {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+          </Button>
+        </div>
+
+        <div className="flex items-center justify-between pt-1 pb-2">
+          <label className="flex items-center gap-2 cursor-pointer group">
+            <Checkbox checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)} />
+            <span className="text-sm font-medium text-gray-600 select-none">Ghi nhớ đăng nhập</span>
+          </label>
+          <Link to="/forgot-password" className="text-sm font-bold text-blue-600 hover:text-blue-800 transition-colors">
+            Quên mật khẩu?
+          </Link>
+        </div>
+
+        <Button
+          type="submit"
+          disabled={isLoading}
+          className="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-xl py-6 text-base font-bold shadow-sm transition-all duration-200 disabled:opacity-70 disabled:cursor-not-allowed"
         >
-          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 shadow-[0_0_20px_rgba(6,182,212,0.4)] mb-4 transition-transform group-hover:scale-105">
-            <svg
-              className="h-6 w-6 text-white"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2.5}
-                d="M5 10l7-7m0 0l7 7m-7-7v18"
-              />
-            </svg>
-          </div>
-          <h2 className="text-3xl font-black text-center tracking-tight bg-gradient-to-r from-cyan-400 via-blue-400 to-indigo-400 bg-clip-text text-transparent">
-            PARKING SMART
-          </h2>
-          <p className="text-center text-slate-400 text-xs mt-1.5 uppercase tracking-wider font-semibold group-hover:text-slate-300">
-            Hệ Thống Vận Hành Bãi Đỗ Xe
-          </p>
+          {isLoading ? (
+            <div className="flex items-center gap-2">
+              <div className="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent" />
+              <span>Đang đăng nhập...</span>
+            </div>
+          ) : (
+            "Đăng nhập"
+          )}
+        </Button>
+      </form>
+
+      <div className="relative mt-8 mb-6">
+        <div className="absolute inset-0 flex items-center">
+          <div className="w-full border-t border-gray-200"></div>
         </div>
-
-        {/* Error message */}
-        {error && (
-          <div className="mb-6 flex items-start gap-2.5 rounded-lg border border-red-500/30 bg-red-500/10 p-3.5 text-xs text-red-200 animate-shake">
-            <ShieldAlert className="h-4 w-4 shrink-0 text-red-400 mt-0.5" />
-            <div>
-              <span className="font-bold">Đăng nhập thất bại:</span> {error}
-            </div>
-          </div>
-        )}
-
-        {/* Login Form */}
-        <form onSubmit={handleSubmit} className="space-y-5">
-          <div className="space-y-1.5">
-            <label className="block text-xs font-bold text-slate-300 uppercase tracking-wide">
-              Tên tài khoản
-            </label>
-            <div className="relative group">
-              <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400 group-focus-within:text-cyan-400 transition-colors z-10">
-                <User className="h-4 w-4" />
-              </span>
-              <Input
-                type="text"
-                required
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                className="pl-10 pr-4 py-2.5 text-sm text-white placeholder-slate-500 bg-white/5 border-white/10 rounded-xl focus-visible:ring-cyan-500/20 focus-visible:border-cyan-500/50"
-                placeholder="Ví dụ: staff01"
-              />
-            </div>
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="block text-xs font-bold text-slate-300 uppercase tracking-wide">
-              Mật khẩu
-            </label>
-            <div className="relative group">
-              <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400 group-focus-within:text-cyan-400 transition-colors z-10">
-                <Lock className="h-4 w-4" />
-              </span>
-              <Input
-                type={showPassword ? "text" : "password"}
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="pl-10 pr-10 py-2.5 text-sm text-white placeholder-slate-500 bg-white/5 border-white/10 rounded-xl focus-visible:ring-cyan-500/20 focus-visible:border-cyan-500/50"
-                placeholder="••••••••"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400 hover:text-slate-200 transition-colors cursor-pointer z-10"
-              >
-                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              </button>
-            </div>
-          </div>
-
-          <div className="pt-2">
-            <Button
-              type="submit"
-              disabled={isLoading}
-              className="w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 via-blue-600 to-indigo-600 hover:from-cyan-400 hover:via-blue-50 hover:to-indigo-500 text-white py-6 text-sm font-bold shadow-[0_4px_20px_rgba(6,182,212,0.25)] hover:shadow-[0_4px_25px_rgba(6,182,212,0.4)] transition-all duration-300 disabled:opacity-50 disabled:pointer-events-none overflow-hidden group cursor-pointer border-0"
-            >
-              {isLoading ? (
-                <>
-                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                  <span>ĐANG ĐĂNG NHẬP...</span>
-                </>
-              ) : (
-                <>
-                  <span>ĐĂNG NHẬP</span>
-                  <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
-                </>
-              )}
-            </Button>
-          </div>
-        </form>
-
-        {/* Demo credentials Quick Login */}
-        <div className="mt-8 border-t border-white/5 pt-6">
-          <div className="flex items-center gap-1.5 mb-3">
-            <CheckCircle2 className="h-3.5 w-3.5 text-cyan-400" />
-            <span className="text-[11px] font-bold text-slate-300 uppercase tracking-wider">
-              Chọn tài khoản demo để đăng nhập nhanh:
-            </span>
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            {DEMO_ACCOUNTS.map((account) => (
-              <button
-                key={account.username}
-                type="button"
-                onClick={() => handleQuickLogin(account.username)}
-                className={`flex flex-col items-start p-2 rounded-lg bg-gradient-to-br border transition-all text-left duration-200 hover:scale-[1.02] hover:bg-white/5 active:scale-[0.98] cursor-pointer ${account.color}`}
-              >
-                <span className="text-[10px] opacity-75 font-semibold">{account.label}</span>
-                <span className="text-xs font-mono font-bold mt-0.5">{account.username}</span>
-              </button>
-            ))}
-          </div>
+        <div className="relative flex justify-center text-sm">
+          <span className="bg-white px-4 text-gray-400">hoặc</span>
         </div>
-      </Card>
-    </div>
+      </div>
+
+      <div className="text-center mb-8">
+        <span className="text-sm text-gray-600">Chưa có tài khoản? </span>
+        <Link to="/register" className="text-sm font-bold text-blue-600 hover:text-blue-800 transition-colors">
+          Đăng ký
+        </Link>
+      </div>
+
+      <div className="bg-blue-50/50 border border-blue-100 rounded-xl p-4 flex items-start gap-3">
+        <ShieldCheck size={20} className="text-blue-600 flex-shrink-0 mt-0.5" />
+        <p className="text-xs font-medium text-blue-900/80 leading-relaxed">
+          Khu vực dành riêng cho nhân viên, quản lý và quản trị viên. Vui lòng không chia sẻ thông tin đăng nhập.
+        </p>
+      </div>
+    </AuthSplitLayout>
   );
 }

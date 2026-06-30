@@ -1,235 +1,135 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { BarChart3, CarFront, Download, Gauge, RefreshCw, TrendingUp } from "lucide-react";
-import {
-  Area,
-  AreaChart,
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
+import React, { useCallback, useEffect, useState } from "react";
+import { Download, Calendar } from "lucide-react";
 import { toast } from "sonner";
 import { reportService } from "@/services/reportService";
-import { formatVND } from "@/lib/format";
-import { PageHeader, PageShell, MetricCard } from "@/components/layout/PageScaffold";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { approvalService } from "@/services/approvalService";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 
-const INITIAL_DATE_RANGE = {
-  from: "2026-06-10",
-  to: "2026-06-16",
-};
-
-function formatAxisVND(value) {
-  const number = Number(value || 0);
-  if (number >= 1000000) return `${Number((number / 1000000).toFixed(1))}tr`;
-  if (number >= 1000) return `${Math.round(number / 1000)}k`;
-  return `${number}`;
-}
+import ReportStatCards from "@/components/manager/reports/ReportStatCards";
+import ReportCharts from "@/components/manager/reports/ReportCharts";
 
 export default function ReportsPage() {
-  const [dateRange, setDateRange] = useState(INITIAL_DATE_RANGE);
-  const [summary, setSummary] = useState(null);
-  const [revenue, setRevenue] = useState([]);
-  const [traffic, setTraffic] = useState([]);
-  const [occupancy, setOccupancy] = useState([]);
+  const [activeTab, setActiveTab] = useState("tong_quan");
   const [isLoading, setIsLoading] = useState(true);
 
-  const loadReports = useCallback(async () => {
+  // States
+  const [summary, setSummary] = useState(null);
+  const [revenue, setRevenue] = useState([]);
+  const [occupancy, setOccupancy] = useState([]);
+  const [lostCardsPending, setLostCardsPending] = useState(0);
+
+  const loadData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const params = { from: dateRange.from, to: dateRange.to };
-      const [summaryData, revenueData, trafficData, occupancyData] = await Promise.all([
-        reportService.getSummary(params),
-        reportService.getRevenue(params),
-        reportService.getTraffic(params),
-        reportService.getOccupancy(params),
+      const [summaryData, revenueData, occupancyData, lostCases] = await Promise.all([
+        reportService.getSummary({}),
+        reportService.getRevenue({}),
+        reportService.getOccupancy({}),
+        approvalService.getLostCardCases()
       ]);
       setSummary(summaryData);
       setRevenue(revenueData);
-      setTraffic(trafficData);
       setOccupancy(occupancyData);
+      setLostCardsPending(lostCases?.filter(c => c.status === "PENDING").length || 0);
     } catch (error) {
-      toast.error(error.message || "Không thể tải báo cáo.");
+      toast.error(error.message || "Không thể tải dữ liệu báo cáo.");
     } finally {
       setIsLoading(false);
     }
-  }, [dateRange.from, dateRange.to]);
+  }, []);
 
   useEffect(() => {
-    loadReports();
-  }, [loadReports]);
+    loadData();
+  }, [loadData]);
 
-  const csvRows = useMemo(() => {
-    const rows = [["Loai", "Nhan", "Gia tri 1", "Gia tri 2"]];
-    revenue.forEach((item) => rows.push(["Doanh thu", item.label, item.revenue, ""]));
-    traffic.forEach((item) => rows.push(["Luu luong", item.label, item.entry, item.exit]));
-    occupancy.forEach((item) => rows.push(["Lap day", item.label, item.occupancy, ""]));
-    return rows;
-  }, [revenue, traffic, occupancy]);
-
-  const exportCsv = () => {
-    const csv = csvRows.map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(",")).join("\n");
-    const blob = new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `parking-report-${dateRange.from}-${dateRange.to}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
-    toast.success("Đã xuất CSV báo cáo.");
+  const handleExport = async () => {
+    try {
+      toast.info("Đang xuất báo cáo...");
+      const blob = await reportService.exportExcel({});
+      const url = window.URL.createObjectURL(new Blob([blob]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `BaoCao_${new Date().toISOString().split('T')[0]}.xlsx`);
+      document.body.appendChild(link);
+      link.click();
+      link.parentNode.removeChild(link);
+      toast.success("Xuất báo cáo thành công!");
+    } catch (error) {
+      toast.error("Lỗi xuất báo cáo: " + error.message);
+    }
   };
 
-  const stats = [
-    {
-      label: "Doanh thu hôm nay",
-      value: formatVND(summary?.revenueToday),
-      sub: `+${summary?.revenueDelta || 0}% so với kỳ trước`,
-      icon: TrendingUp,
-      tone: "success",
-    },
-    {
-      label: "Lượt xe vào",
-      value: summary?.entriesToday || 0,
-      sub: "Entry lane",
-      icon: CarFront,
-      tone: "info",
-    },
-    {
-      label: "Lượt xe ra",
-      value: summary?.exitsToday || 0,
-      sub: "Exit lane",
-      icon: BarChart3,
-      tone: "default",
-    },
-    {
-      label: "Mật độ lấp đầy",
-      value: `${summary?.occupancyRate || 0}%`,
-      sub: `${summary?.activeSessions || 0} phiên active`,
-      icon: Gauge,
-      tone: "warning",
-    },
+  const tabs = [
+    { id: "tong_quan", label: "Tổng quan" },
+    { id: "doanh_thu", label: "Doanh thu" },
+    { id: "luot_xe", label: "Lượt xe" },
+    { id: "the_ve", label: "Thẻ & Vé tháng" },
+    { id: "tang_khu", label: "Tầng & Khu vực" },
   ];
 
+  if (isLoading) {
+    return <div className="flex h-screen items-center justify-center text-slate-500 font-bold animate-pulse">Đang tải dữ liệu báo cáo...</div>;
+  }
+
   return (
-    <PageShell>
-      <PageHeader
-        eyebrow="Manager · Sprint 5"
-        title="Báo cáo & thống kê"
-        description="Theo dõi doanh thu, lưu lượng xe và mật độ lấp đầy bằng cùng một bố cục dữ liệu, sẵn sàng xuất CSV cho Excel."
-        icon={BarChart3}
-        actions={
-          <>
-            <Button variant="outline" onClick={loadReports} disabled={isLoading}>
-              <RefreshCw data-icon="inline-start" />
-              Tải lại
-            </Button>
-            <Button onClick={exportCsv}>
-              <Download data-icon="inline-start" />
-              Xuất CSV
-            </Button>
-          </>
-        }
-      />
-
-      <Card className="app-card">
-        <CardHeader>
-          <CardTitle>Bộ lọc thời gian</CardTitle>
-          <CardDescription>Khoảng ngày áp dụng cho dữ liệu báo cáo và file CSV.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-3 md:grid-cols-[1fr_1fr_auto]">
-            <label className="flex flex-col gap-1.5">
-              <span className="app-field-label">Từ ngày</span>
-              <Input
-                type="date"
-                name="report-from"
-                autoComplete="off"
-                value={dateRange.from}
-                onChange={(event) => setDateRange((current) => ({ ...current, from: event.target.value }))}
-              />
-            </label>
-            <label className="flex flex-col gap-1.5">
-              <span className="app-field-label">Đến ngày</span>
-              <Input
-                type="date"
-                name="report-to"
-                autoComplete="off"
-                value={dateRange.to}
-                onChange={(event) => setDateRange((current) => ({ ...current, to: event.target.value }))}
-              />
-            </label>
-            <div className="flex items-end">
-              <Button variant="outline" onClick={loadReports} disabled={isLoading} className="w-full md:w-auto">
-                Áp dụng
-              </Button>
-            </div>
+    <div className="min-h-screen bg-[#f8fafc] p-2 md:p-6 pb-20 space-y-6 max-w-[1600px] mx-auto">
+      
+      {/* Header Area */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-800">Báo cáo & Thống kê</h2>
+          <p className="text-sm text-slate-500 mt-1">Xem, phân tích và xuất báo cáo hoạt động hệ thống gửi xe</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <Button variant="outline" className="bg-white border-slate-200 text-slate-700 font-semibold shadow-sm" onClick={handleExport}>
+            <Download className="w-4 h-4 mr-2" />
+            Xuất báo cáo
+          </Button>
+          <div className="flex items-center gap-2 px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-medium text-slate-700 shadow-sm cursor-pointer hover:bg-slate-50">
+            01/06/2026 - 21/06/2026
+            <Calendar className="w-4 h-4 text-slate-400 ml-2" />
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {stats.map((item) => (
-          <MetricCard key={item.label} {...item} />
+      {/* Tabs */}
+      <div className="flex items-center gap-6 border-b border-slate-200 overflow-x-auto no-scrollbar">
+        {tabs.map(tab => (
+          <div 
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`pb-3 text-sm font-semibold cursor-pointer whitespace-nowrap transition-colors relative ${
+              activeTab === tab.id ? 'text-blue-600' : 'text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            {tab.label}
+            {activeTab === tab.id && (
+              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 rounded-t-full"></div>
+            )}
+          </div>
         ))}
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-2">
-        <ChartCard title="Doanh thu theo ngày" description="Tổng tiền đã thu theo từng ngày">
-          <ResponsiveContainer width="100%" height={280}>
-            <AreaChart data={revenue}>
-              <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" />
-              <XAxis dataKey="label" tickLine={false} axisLine={false} />
-              <YAxis tickLine={false} axisLine={false} tickFormatter={formatAxisVND} width={48} />
-              <Tooltip formatter={(value) => formatVND(value)} />
-              <Area type="monotone" dataKey="revenue" stroke="var(--chart-1)" fill="var(--accent)" strokeWidth={3} />
-            </AreaChart>
-          </ResponsiveContainer>
-        </ChartCard>
-
-        <ChartCard title="Lưu lượng xe" description="So sánh xe vào và xe ra theo khung giờ">
-          <ResponsiveContainer width="100%" height={280}>
-            <LineChart data={traffic}>
-              <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" />
-              <XAxis dataKey="label" tickLine={false} axisLine={false} />
-              <YAxis tickLine={false} axisLine={false} />
-              <Tooltip />
-              <Line type="monotone" dataKey="entry" name="Xe vào" stroke="var(--chart-1)" strokeWidth={3} dot={false} />
-              <Line type="monotone" dataKey="exit" name="Xe ra" stroke="var(--chart-3)" strokeWidth={3} dot={false} />
-            </LineChart>
-          </ResponsiveContainer>
-        </ChartCard>
-      </div>
-
-      <ChartCard title="Mật độ lấp đầy theo khu" description="Tỷ lệ sử dụng từng khu trong bãi">
-        <ResponsiveContainer width="100%" height={300}>
-          <BarChart data={occupancy}>
-            <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" />
-            <XAxis dataKey="label" tickLine={false} axisLine={false} />
-            <YAxis tickLine={false} axisLine={false} />
-            <Tooltip formatter={(value) => `${value}%`} />
-            <Bar dataKey="occupancy" name="Lấp đầy" fill="var(--chart-2)" radius={[6, 6, 0, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
-      </ChartCard>
-    </PageShell>
-  );
-}
-
-function ChartCard({ title, description, children }) {
-  return (
-    <Card className="app-card">
-      <CardHeader>
-        <CardTitle>{title}</CardTitle>
-        <CardDescription>{description}</CardDescription>
-      </CardHeader>
-      <CardContent>{children}</CardContent>
-    </Card>
+      {/* Main Content Area */}
+      {activeTab === "tong_quan" ? (
+        <div className="space-y-6">
+          <ReportStatCards summary={summary} lostCardsPending={lostCardsPending} />
+          <ReportCharts revenue={revenue} occupancy={occupancy} />
+        </div>
+      ) : (
+        <div className="bg-white rounded-xl border border-slate-200 p-12 text-center shadow-sm flex flex-col items-center justify-center min-h-[400px]">
+          <div className="w-16 h-16 bg-blue-50 text-blue-500 rounded-full flex items-center justify-center mb-4">
+            <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+          </div>
+          <h3 className="text-xl font-bold text-slate-800 mb-2">Tính năng đang được phát triển</h3>
+          <p className="text-slate-500 max-w-md mx-auto">
+            Chi tiết báo cáo cho mục <span className="font-semibold text-blue-600">"{tabs.find(t => t.id === activeTab)?.label}"</span> hiện đang trong quá trình xây dựng và sẽ sớm ra mắt trong phiên bản tiếp theo.
+          </p>
+          <Button variant="outline" className="mt-6" onClick={() => setActiveTab("tong_quan")}>
+            Quay lại Tổng quan
+          </Button>
+        </div>
+      )}
+    </div>
   );
 }

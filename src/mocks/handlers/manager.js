@@ -19,7 +19,7 @@ export const managerHandlers = [
   // =========================================================================
   ...enabled(
     MOCK_FLAGS.MANAGER_CARDS,
-    http.get(`${API_BASE_URLS.core}/manager/cards`, async () => {
+    http.get(`${API_BASE_URLS.core}/cards`, async () => {
       await delay(250);
       return ok(db.getCards());
     })
@@ -27,9 +27,10 @@ export const managerHandlers = [
 
   ...enabled(
     MOCK_FLAGS.MANAGER_CARDS,
-    http.post(`${API_BASE_URLS.core}/manager/cards`, async ({ request }) => {
+    http.post(`${API_BASE_URLS.core}/cards`, async ({ request }) => {
       await delay(250);
-      const { code, note } = await request.json();
+      const { cardNumber, note } = await request.json();
+      const code = cardNumber;
       let inMemoryCards = db.getCards();
       
       if (inMemoryCards.some(c => c.code.trim().toUpperCase() === code.trim().toUpperCase())) {
@@ -51,10 +52,10 @@ export const managerHandlers = [
 
   ...enabled(
     MOCK_FLAGS.MANAGER_CARDS,
-    http.put(`${API_BASE_URLS.core}/manager/cards/:id/status`, async ({ params, request }) => {
+    http.patch(`${API_BASE_URLS.core}/cards/:id/status`, async ({ params, request }) => {
       await delay(250);
       const cardId = Number(params.id);
-      const { status } = await request.json();
+      const status = await request.json(); // It comes as raw string from the new cardService
       
       let inMemoryCards = db.getCards();
       const index = inMemoryCards.findIndex(c => c.id === cardId);
@@ -72,11 +73,14 @@ export const managerHandlers = [
   ),
 
   // =========================================================================
+  
+
+
   // MANAGER MONTHLY PASSES
   // =========================================================================
   ...enabled(
     MOCK_FLAGS.MANAGER_PASSES,
-    http.get(`${API_BASE_URLS.core}/manager/monthly-passes`, async () => {
+    http.get(`${API_BASE_URLS.core}/monthly-passes`, async () => {
       await delay(250);
       return ok(db.getMonthlyPasses());
     })
@@ -84,7 +88,7 @@ export const managerHandlers = [
 
   ...enabled(
     MOCK_FLAGS.MANAGER_PASSES,
-    http.post(`${API_BASE_URLS.core}/manager/monthly-passes`, async ({ request }) => {
+    http.post(`${API_BASE_URLS.core}/monthly-passes`, async ({ request }) => {
       await delay(250);
       const passData = await request.json();
       let inMemoryPasses = db.getMonthlyPasses();
@@ -101,7 +105,7 @@ export const managerHandlers = [
 
   ...enabled(
     MOCK_FLAGS.MANAGER_PASSES,
-    http.put(`${API_BASE_URLS.core}/manager/monthly-passes/:id/status`, async ({ params, request }) => {
+    http.patch(`${API_BASE_URLS.core}/monthly-passes/:id/status`, async ({ params, request }) => {
       await delay(250);
       const passId = Number(params.id);
       const { status } = await request.json();
@@ -118,7 +122,7 @@ export const managerHandlers = [
 
   ...enabled(
     MOCK_FLAGS.MANAGER_PASSES,
-    http.put(`${API_BASE_URLS.core}/manager/monthly-passes/:id/renew`, async ({ params, request }) => {
+    http.post(`${API_BASE_URLS.core}/monthly-passes/:id/renew`, async ({ params, request }) => {
       await delay(250);
       const passId = Number(params.id);
       const { endDate } = await request.json();
@@ -139,7 +143,7 @@ export const managerHandlers = [
   // =========================================================================
   ...enabled(
     MOCK_FLAGS.MANAGER_STRUCTURES,
-    http.get(`${API_BASE_URLS.core}/manager/structures/floors`, async () => {
+    http.get(`${API_BASE_URLS.core}/floors`, async () => {
       await delay(250);
       return ok(db.getFloors());
     })
@@ -147,7 +151,7 @@ export const managerHandlers = [
 
   ...enabled(
     MOCK_FLAGS.MANAGER_STRUCTURES,
-    http.post(`${API_BASE_URLS.core}/manager/structures/floors`, async ({ request }) => {
+    http.post(`${API_BASE_URLS.core}/floors`, async ({ request }) => {
       await delay(250);
       const floorData = await request.json();
       let inMemoryFloors = db.getFloors();
@@ -165,7 +169,7 @@ export const managerHandlers = [
 
   ...enabled(
     MOCK_FLAGS.MANAGER_STRUCTURES,
-    http.put(`${API_BASE_URLS.core}/manager/structures/floors/:id`, async ({ params, request }) => {
+    http.put(`${API_BASE_URLS.core}/floors/:id`, async ({ params, request }) => {
       await delay(250);
       const floorId = Number(params.id);
       const floorData = await request.json();
@@ -182,7 +186,7 @@ export const managerHandlers = [
 
   ...enabled(
     MOCK_FLAGS.MANAGER_STRUCTURES,
-    http.get(`${API_BASE_URLS.core}/manager/structures/areas`, async () => {
+    http.get(`${API_BASE_URLS.core}/areas`, async () => {
       await delay(250);
       return ok(db.getAreas());
     })
@@ -190,7 +194,42 @@ export const managerHandlers = [
 
   ...enabled(
     MOCK_FLAGS.MANAGER_STRUCTURES,
-    http.get(`${API_BASE_URLS.core}/manager/structures/slots`, async () => {
+    http.post(`${API_BASE_URLS.core}/areas`, async ({ request }) => {
+      await delay(250);
+      const areaData = await request.json();
+      let inMemoryAreas = db.getAreas();
+      const newArea = {
+        id: Date.now(),
+        ...areaData,
+        totalSlots: 0,
+        availableSlots: 0
+      };
+      inMemoryAreas.push(newArea);
+      db.saveAreas(inMemoryAreas);
+      return ok(newArea);
+    })
+  ),
+
+  ...enabled(
+    MOCK_FLAGS.MANAGER_STRUCTURES,
+    http.put(`${API_BASE_URLS.core}/areas/:id`, async ({ params, request }) => {
+      await delay(250);
+      const areaId = Number(params.id);
+      const areaData = await request.json();
+      
+      let inMemoryAreas = db.getAreas();
+      const index = inMemoryAreas.findIndex(a => a.id === areaId);
+      if (index === -1) return notFound("Không tìm thấy khu vực.");
+
+      inMemoryAreas[index] = { ...inMemoryAreas[index], ...areaData };
+      db.saveAreas(inMemoryAreas);
+      return ok(inMemoryAreas[index]);
+    })
+  ),
+
+  ...enabled(
+    MOCK_FLAGS.MANAGER_STRUCTURES,
+    http.get(`${API_BASE_URLS.core}/slots`, async () => {
       await delay(250);
       return ok(db.getSlots());
     })
@@ -198,7 +237,24 @@ export const managerHandlers = [
 
   ...enabled(
     MOCK_FLAGS.MANAGER_STRUCTURES,
-    http.put(`${API_BASE_URLS.core}/manager/structures/slots/:id/status`, async ({ params, request }) => {
+    http.post(`${API_BASE_URLS.core}/slots`, async ({ request }) => {
+      await delay(250);
+      const slotData = await request.json();
+      let inMemorySlots = db.getSlots();
+      const newSlot = {
+        id: Date.now(),
+        ...slotData,
+        status: "AVAILABLE"
+      };
+      inMemorySlots.push(newSlot);
+      db.saveSlots(inMemorySlots);
+      return ok(newSlot);
+    })
+  ),
+
+  ...enabled(
+    MOCK_FLAGS.MANAGER_STRUCTURES,
+    http.patch(`${API_BASE_URLS.core}/slots/:id/status`, async ({ params, request }) => {
       await delay(250);
       const slotId = Number(params.id);
       const { status } = await request.json();
@@ -213,20 +269,12 @@ export const managerHandlers = [
     })
   ),
 
-  ...enabled(
-    MOCK_FLAGS.MANAGER_STRUCTURES,
-    http.get(`${API_BASE_URLS.core}/manager/structures/gates`, async () => {
-      await delay(250);
-      return ok(db.getGates());
-    })
-  ),
-
   // =========================================================================
   // MANAGER PRICING
   // =========================================================================
   ...enabled(
     MOCK_FLAGS.MANAGER_PRICING,
-    http.get(`${API_BASE_URLS.core}/manager/pricing`, async () => {
+    http.get(`${API_BASE_URLS.core}/pricing-rules`, async () => {
       await delay(250);
       return ok(db.getPricingRules());
     })
@@ -234,7 +282,7 @@ export const managerHandlers = [
 
   ...enabled(
     MOCK_FLAGS.MANAGER_PRICING,
-    http.post(`${API_BASE_URLS.core}/manager/pricing`, async ({ request }) => {
+    http.post(`${API_BASE_URLS.core}/pricing-rules`, async ({ request }) => {
       await delay(250);
       const ruleData = await request.json();
       let inMemoryPricingRules = db.getPricingRules();
@@ -251,7 +299,7 @@ export const managerHandlers = [
 
   ...enabled(
     MOCK_FLAGS.MANAGER_PRICING,
-    http.put(`${API_BASE_URLS.core}/manager/pricing/:id`, async ({ params, request }) => {
+    http.put(`${API_BASE_URLS.core}/pricing-rules/:id`, async ({ params, request }) => {
       await delay(250);
       const ruleId = Number(params.id);
       const ruleData = await request.json();

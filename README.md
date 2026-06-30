@@ -1,22 +1,10 @@
-# Parking Building Frontend
+# Frontend Skeleton
 
-React + Vite frontend for the Parking Building Management System.
+This folder keeps the React architecture for the Parking Building Management System.
 
-## Run locally
+Only the minimal Vite/React bootstrap is included. Students should implement the actual routes, providers, API clients, pages, components, hooks, utilities, styles, and tests according to the dual-backend specification in `../docs`.
 
-```powershell
-npm install
-Copy-Item .env.example .env.local
-npm run dev
-```
-
-## Build
-
-```powershell
-npm run build
-```
-
-## API ownership
+Expected API ownership when implemented:
 
 - `coreApi`: `.NET Core API` at `/api/core/*`
 - `supportApi`: `Spring Boot Support API` at `/api/support/*`

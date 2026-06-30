@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useOutletContext } from "react-router-dom";
 import {
-  AlertTriangle,
   Camera,
   CarFront,
   CheckCircle2,
@@ -13,19 +13,20 @@ import {
   RefreshCw,
   ShieldCheck,
   XCircle,
+  AlertTriangle,
+  Plus,
+  MapPin,
+  Check,
+  X,
+  CreditCard as CardIcon,
+  Search,
+  Bell,
+  ChevronDown
 } from "lucide-react";
 import { toast } from "sonner";
 import { bookingService } from "../../services/bookingService";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -35,6 +36,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   getLastGateScanEvent,
   subscribeGateScanEvents,
@@ -88,6 +96,7 @@ function formatDateTime(value) {
   return date.toLocaleString("vi-VN", {
     hour: "2-digit",
     minute: "2-digit",
+    second: "2-digit",
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
@@ -165,23 +174,10 @@ function getBookingWindow(booking) {
   };
 }
 
-function getStatusTone(variant) {
-  switch (variant) {
-    case "valid":
-    case "done":
-      return "border-emerald-200 bg-emerald-50 text-emerald-800";
-    case "warning":
-    case "grace":
-      return "border-amber-200 bg-amber-50 text-amber-800";
-    case "expired":
-    case "invalid":
-      return "border-red-200 bg-red-50 text-red-800";
-    default:
-      return "border-border bg-muted text-muted-foreground";
-  }
-}
-
 export default function StaffEntryPage() {
+  const { currentUser } = useOutletContext() || {};
+  const staffName = currentUser?.fullName || currentUser?.username || "Nhân viên Trực";
+
   const [paidBookings, setPaidBookings] = useState([]);
   const [selectedBookingId, setSelectedBookingId] = useState("");
   const [selectedBooking, setSelectedBooking] = useState(null);
@@ -192,8 +188,19 @@ export default function StaffEntryPage() {
   const [deviceDraft, setDeviceDraft] = useState(emptyDeviceDraft);
   const [lastDeviceEvent, setLastDeviceEvent] = useState(null);
   const [previewImage, setPreviewImage] = useState(null);
+  
   const [isBookingDetailsOpen, setIsBookingDetailsOpen] = useState(false);
+  
+  const [currentTime, setCurrentTime] = useState(formatDateTime(new Date()));
+
   const processedEventRef = useRef("");
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(formatDateTime(new Date()));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   const selectedBookingWindow = useMemo(() => getBookingWindow(selectedBooking), [selectedBooking]);
   const hasUsableBooking = Boolean(
@@ -327,7 +334,6 @@ export default function StaffEntryPage() {
     if (lastEvent) {
       applyEntryDeviceEvent(lastEvent);
     }
-
     return subscribeGateScanEvents(applyEntryDeviceEvent);
   }, [applyEntryDeviceEvent]);
 
@@ -359,18 +365,6 @@ export default function StaffEntryPage() {
     setBookingScan(initialBookingScan);
   };
 
-  const refreshBookings = async () => {
-    const preferredId = bookingScan.requestedId || selectedBookingId;
-    const { matchedBooking } = await loadPaidBookings(preferredId);
-    if (preferredId && !matchedBooking) {
-      setBookingScan({
-        requestedId: preferredId,
-        status: "not-found",
-        message: "Booking không còn trong danh sách chờ vào sau khi tải lại.",
-      });
-    }
-  };
-
   const handleConfirmEntry = async () => {
     if (!deviceDraft.cardCode.trim()) {
       toast.error("Vui lòng quét hoặc nhập mã thẻ NFC trước khi xác nhận.");
@@ -378,12 +372,6 @@ export default function StaffEntryPage() {
     }
     if (!deviceDraft.plate.trim()) {
       toast.error("Vui lòng nhập biển số xe thực tế.");
-      return;
-    }
-
-    if (false && !selectedBooking) {
-      setSuccessMsg(`Dữ liệu thẻ ${deviceDraft.cardCode.trim().toUpperCase()} đã sẵn sàng cho lượt vào vãng lai.`);
-      toast.info("Luồng vãng lai đã sẵn sàng. API tạo phiên vào bãi sẽ nối ở phase backend tiếp theo.");
       return;
     }
 
@@ -411,16 +399,12 @@ export default function StaffEntryPage() {
       const session = result?.session || result;
 
       if (!selectedBooking) {
-        setSuccessMsg(`ÄÃ£ táº¡o phiÃªn ${session?.sessionCode || ""} cho xe vÃ£ng lai. Test xe ra báº±ng tháº» ${deviceDraft.cardCode.trim().toUpperCase()}.`);
-        setDeviceDraft(emptyDeviceDraft);
-        setLastDeviceEvent(null);
-        setSelectedBookingId("");
-        setSelectedBooking(null);
-        setBookingScan(initialBookingScan);
-        await loadPaidBookings();
-        return;
+        setSuccessMsg(`Đã tạo phiên ${session?.sessionCode || ""} cho xe vãng lai. Biển: ${deviceDraft.plate}, Thẻ: ${deviceDraft.cardCode}`);
+      } else {
+        setSuccessMsg(`Đã gán thẻ ${deviceDraft.cardCode} và xác nhận xe vào bãi cho booking ${selectedBooking.id}.`);
       }
-      setSuccessMsg(`Đã gán thẻ ${deviceDraft.cardCode.trim().toUpperCase()} và xác nhận xe vào bãi cho booking ${selectedBooking.id}.`);
+      
+      toast.success(successMsg || "Tạo phiên thành công!");
       setDeviceDraft(emptyDeviceDraft);
       setLastDeviceEvent(null);
       setSelectedBookingId("");
@@ -434,531 +418,467 @@ export default function StaffEntryPage() {
     }
   };
 
+  // Derived UI states
+  const isCardValid = !!deviceDraft.cardCode.trim();
+  const isPlateValid = deviceDraft.plate.trim().length >= 5;
+  const isVehicleTypeValid = !!deviceDraft.vehicleTypeName;
+  const allChecksPassed = isCardValid && isPlateValid && isVehicleTypeValid;
+  const hasBooking = !!selectedBooking;
+
   return (
-    <div className="flex h-auto flex-col gap-3 pb-24 lg:pb-0">
-      <header className="flex shrink-0 flex-col gap-3 border-b pb-3 lg:flex-row lg:items-end lg:justify-between">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <CarFront className="text-primary" />
-            <h1 className="truncate text-2xl font-black text-foreground">Cổng vào bãi xe</h1>
+    <div className="h-[calc(100dvh-11rem)] md:h-[calc(100dvh-7rem)] flex flex-col bg-transparent text-slate-800 font-sans selection:bg-indigo-500/30 overflow-hidden">
+      
+      {/* HEADER */}
+      <header className="flex-none flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-4 pb-4 border-b border-slate-200 shrink-0">
+        <div className="flex items-center gap-4">
+          <div className="w-10 h-10 bg-indigo-600 flex items-center justify-center rounded-lg shadow-sm text-white font-black text-xl">
+            P
           </div>
-          <p className="mt-1 max-w-3xl text-sm font-medium leading-6 text-muted-foreground">
-            Thiết bị ngoài gửi QR/NFC/OCR; Staff xem tóm tắt, gắn thẻ NFC và xác nhận trong một khung vận hành.
-          </p>
+          <div>
+            <h1 className="text-xl font-black text-slate-900 uppercase">SWP BUILDING</h1>
+            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-0.5">SMART PARKING</p>
+          </div>
+          <div className="h-8 w-px bg-slate-200 mx-2 hidden lg:block"></div>
+          <div className="hidden lg:flex items-center gap-2 text-slate-600 bg-white px-3 py-1.5 rounded border shadow-sm">
+            <RefreshCw className="h-4 w-4" />
+            <span className="text-sm font-bold">Entry Processing</span>
+          </div>
         </div>
-        <div className="flex shrink-0 flex-wrap gap-2">
-          <Badge variant="secondary" className="w-fit rounded-lg px-3 py-1 font-mono">
-            {deviceDraft.gateCode}
-          </Badge>
-          {lastDeviceEvent && (
-            <Badge variant="outline" className="w-fit rounded-lg px-3 py-1 font-mono">
-              {lastDeviceEvent.scanType}
-            </Badge>
-          )}
+
+        <div className="flex items-center gap-4">
+          <button className="relative text-slate-500 hover:text-slate-800 transition">
+            <Bell className="w-5 h-5" />
+            <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-rose-500 rounded-full border border-white"></span>
+          </button>
+          
+          <div className="flex items-center gap-3 bg-white px-3 py-1.5 rounded-full border shadow-sm cursor-pointer hover:bg-slate-50 transition">
+            <div className="w-8 h-8 bg-slate-200 rounded-full overflow-hidden">
+              <img src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=100&q=80" alt="Avatar" />
+            </div>
+            <div className="text-left hidden sm:block">
+              <p className="text-xs font-bold text-slate-800">{staffName}</p>
+              <p className="text-[10px] text-slate-500">Nhân viên</p>
+            </div>
+            <ChevronDown className="w-4 h-4 text-slate-400" />
+          </div>
         </div>
       </header>
 
-      <DeviceStrip event={lastDeviceEvent} successMsg={successMsg} />
+      {successMsg && (
+        <div className="mb-4 flex shrink-0 items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-800 animate-in fade-in zoom-in">
+          <CheckCircle2 className="shrink-0 text-emerald-600" />
+          <span>{successMsg}</span>
+        </div>
+      )}
 
-      <div className="grid min-h-0 gap-3 lg:h-[calc(100dvh-13rem)] lg:min-h-[520px] lg:grid-cols-[minmax(0,1.2fr)_minmax(22rem,0.8fr)]">
-        <section className="flex min-h-0 min-w-0 flex-col gap-3">
-          <CameraFeed
-            title="Camera làn vào"
-            image={deviceDraft.vehicleImageDataUrl}
-            onPreview={() => setPreviewImage({ title: "Camera làn vào", image: deviceDraft.vehicleImageDataUrl })}
-          />
+      {/* MAIN CONSOLE GRID */}
+      <main className="flex-1 min-h-0 grid grid-cols-1 xl:grid-cols-12 gap-4 lg:gap-6 pb-2">
+        
+        {/* ================= COLUMN 1: CAMERA (Span 4) ================= */}
+        <section className="xl:col-span-4 flex flex-col gap-0 bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden min-h-0">
+          <div className="p-3 border-b flex items-center justify-between bg-white">
+            <div className="flex items-center gap-2">
+              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-indigo-600 text-white font-bold text-[10px]">1</span>
+              <h3 className="font-bold text-slate-800 text-sm">Camera nhận diện</h3>
+            </div>
+            <div className="flex gap-1.5">
+              <Badge variant="outline" className={`text-[9px] ${deviceDraft.plate ? 'text-emerald-600 bg-emerald-50 border-emerald-200' : 'text-slate-400'}`}>Biển số đã nhận diện</Badge>
+              <Badge variant="outline" className={`text-[9px] ${isCardValid ? 'text-emerald-600 bg-emerald-50 border-emerald-200' : 'text-slate-400'}`}>Thẻ hợp lệ</Badge>
+            </div>
+          </div>
 
-          <div className="grid shrink-0 gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(15rem,0.9fr)]">
-            <SnapshotTile
-              title="Ảnh biển số"
-              image={deviceDraft.plateImageDataUrl}
-              onPreview={() => setPreviewImage({ title: "Ảnh biển số", image: deviceDraft.plateImageDataUrl })}
-            />
-            <SnapshotTile
-              title="Ảnh người lái"
-              image={deviceDraft.driverImageDataUrl}
-              onPreview={() => setPreviewImage({ title: "Ảnh người lái", image: deviceDraft.driverImageDataUrl })}
-            />
-            <RecognitionPanel draft={deviceDraft} />
+          <div className="relative flex-1 bg-slate-900 w-full flex items-center justify-center overflow-hidden min-h-0">
+            {deviceDraft.vehicleImageDataUrl ? (
+              <img src={deviceDraft.vehicleImageDataUrl} alt="Camera feed" className="w-full h-full object-cover opacity-90" />
+            ) : (
+              <img src="https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=800&q=80" alt="Camera feed mockup" className="w-full h-full object-cover opacity-90" />
+            )}
+
+            <div className="absolute top-3 left-3 flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]"></span>
+              <span className="font-mono text-[10px] text-white font-bold tracking-wider">LIVE</span>
+            </div>
+
+            {deviceDraft.plate && (
+              <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 translate-y-8 border-2 border-emerald-400 bg-black/50 px-4 py-1.5 rounded shadow-lg backdrop-blur-sm">
+                <p className="text-white text-lg font-black font-mono tracking-widest">{deviceDraft.plate}</p>
+              </div>
+            )}
+
+            <div className="absolute bottom-3 left-3 text-white font-mono text-[10px] font-bold opacity-70">
+              CAM_ENTRY_01
+            </div>
+            <div className="absolute bottom-3 right-10 text-white font-mono text-[10px] font-bold opacity-70">
+              {currentTime}
+            </div>
+            <button 
+              onClick={() => setPreviewImage({ title: "Camera Feed", image: deviceDraft.vehicleImageDataUrl })}
+              className="absolute bottom-3 right-3 bg-black/50 p-1.5 rounded text-white hover:bg-black/80 transition"
+            >
+              <Maximize2 className="w-3 h-3" />
+            </button>
           </div>
         </section>
 
-        <CommandPanel
-          bookingScan={bookingScan}
-          paidBookings={paidBookings}
-          selectedBookingId={selectedBookingId}
-          selectedBooking={selectedBooking}
-          selectedBookingWindow={selectedBookingWindow}
-          isBookingLoading={isBookingLoading}
-          deviceDraft={deviceDraft}
-          setDeviceDraft={setDeviceDraft}
-          hasUsableBooking={hasUsableBooking}
-          isConfirming={isConfirming}
-          onBookingChange={handleBookingChange}
-          onRefresh={refreshBookings}
-          onClearBooking={clearBooking}
-          onOpenBookingDetails={() => setIsBookingDetailsOpen(true)}
-          onConfirm={handleConfirmEntry}
-        />
+        {/* ================= COLUMN 2: FORM INFO (Span 4) ================= */}
+        <section className="xl:col-span-4 flex flex-col gap-0 bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden min-h-0">
+          <div className="p-3 border-b flex items-center gap-2 bg-white shrink-0">
+            <span className="flex items-center justify-center w-5 h-5 rounded-full bg-indigo-600 text-white font-bold text-[10px]">2</span>
+            <h3 className="font-bold text-slate-800 text-sm">Thông tin xe vào</h3>
+          </div>
+
+          <div className="p-4 flex flex-col gap-4 text-sm font-medium overflow-y-auto flex-1 min-h-0">
+            <div className="flex items-center gap-4">
+              <label className="w-24 text-slate-500">Biển số <span className="text-red-500">*</span></label>
+              <div className="relative flex-1">
+                <Input value={deviceDraft.plate} onChange={(e) => setDeviceDraft(c => ({...c, plate: e.target.value.toUpperCase()}))} className="font-bold border-slate-200 shadow-none h-9" />
+                {isPlateValid && <span className="absolute right-2 top-2 text-[10px] bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded font-bold flex items-center gap-1"><Check className="w-3 h-3" /> Đã nhận diện</span>}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-4">
+              <label className="w-24 text-slate-500">Mã thẻ</label>
+              <div className="relative flex-1">
+                <Input value={deviceDraft.cardCode} onChange={(e) => setDeviceDraft(c => ({...c, cardCode: e.target.value.toUpperCase()}))} className="font-bold border-slate-200 shadow-none h-9" />
+                {isCardValid && <span className="absolute right-2 top-2 text-[10px] bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded font-bold flex items-center gap-1"><Check className="w-3 h-3" /> Hợp lệ</span>}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-4">
+              <label className="w-24 text-slate-500">Loại xe <span className="text-red-500">*</span></label>
+              <div className="flex-1 flex gap-2">
+                {["Xe máy", "Ô tô", "Xe tải"].map(type => (
+                  <button 
+                    key={type}
+                    onClick={() => setDeviceDraft(c => ({...c, vehicleTypeName: type}))}
+                    className={`flex-1 py-1.5 border rounded flex justify-center items-center gap-1.5 text-xs transition ${deviceDraft.vehicleTypeName.toLowerCase() === type.toLowerCase() ? 'border-indigo-600 bg-indigo-50 text-indigo-700 font-bold' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}
+                  >
+                    {type}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-4">
+              <label className="w-24 text-slate-500">Nhóm tài xế <span className="text-red-500">*</span></label>
+              <div className="flex-1 flex gap-2">
+                <div className="flex-1 py-1.5 border border-emerald-200 bg-emerald-50 text-emerald-700 rounded flex justify-center items-center text-xs font-bold">
+                  Hệ thống tự động nhận diện (API F025)
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-4">
+              <label className="w-24 text-slate-500">Khách hàng</label>
+              <div className="flex-1 flex gap-2">
+                <div className="relative flex-1">
+                  <Input value={selectedBooking?.username || ""} readOnly placeholder="Chọn từ danh sách" className="pl-8 border-slate-200 shadow-none h-9 text-xs" />
+                  <Search className="absolute left-2 top-2.5 w-4 h-4 text-slate-400" />
+                </div>
+                <Button variant="ghost" className="h-9 px-3 text-blue-600 text-xs hover:bg-blue-50 font-semibold flex gap-1">
+                  <Plus className="w-3 h-3" /> Thêm mới
+                </Button>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-4">
+              <label className="w-24 text-slate-500">Cổng vào <span className="text-red-500">*</span></label>
+              <Select value={deviceDraft.gateCode} onValueChange={(val) => setDeviceDraft(c => ({...c, gateCode: val}))}>
+                <SelectTrigger className="flex-1 h-9 border-slate-200 shadow-none text-xs font-semibold">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="GATE-IN-01">Cổng A1</SelectItem>
+                  <SelectItem value="GATE-IN-02">Cổng A2</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex items-center gap-4">
+              <label className="w-24 text-slate-500">Thời gian vào <span className="text-red-500">*</span></label>
+              <div className="flex-1 flex gap-2 items-center">
+                <div className="flex-1 border border-slate-200 rounded px-3 py-1.5 flex items-center gap-2 bg-slate-50">
+                  <Clock3 className="w-4 h-4 text-slate-400" />
+                  <span className="text-xs font-mono font-bold text-slate-700">{currentTime}</span>
+                </div>
+                <button className="text-xs font-semibold text-blue-600 hover:underline">Lấy giờ hiện tại</button>
+              </div>
+            </div>
+
+            {/* Snapshots */}
+            <div className="grid grid-cols-2 gap-3 mt-2 border-t pt-4 border-slate-100">
+              <div className="flex flex-col gap-1.5">
+                <span className="text-xs font-bold text-slate-500 text-center">Ảnh xe</span>
+                <div className="aspect-[2/1] rounded overflow-hidden border border-slate-200 bg-slate-100 flex items-center justify-center">
+                  {deviceDraft.vehicleImageDataUrl ? (
+                    <img src={deviceDraft.vehicleImageDataUrl} className="w-full h-full object-cover cursor-pointer" onClick={() => setPreviewImage({ title: "Ảnh xe", image: deviceDraft.vehicleImageDataUrl })}/>
+                  ) : <ImageIcon className="w-5 h-5 text-slate-300" />}
+                </div>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <span className="text-xs font-bold text-slate-500 text-center">Ảnh biển số</span>
+                <div className="aspect-[2/1] rounded overflow-hidden border border-slate-200 bg-slate-100 flex items-center justify-center">
+                  {deviceDraft.plateImageDataUrl ? (
+                    <img src={deviceDraft.plateImageDataUrl} className="w-full h-full object-contain cursor-pointer" onClick={() => setPreviewImage({ title: "Ảnh biển", image: deviceDraft.plateImageDataUrl })}/>
+                  ) : (
+                    <div className="w-full h-full bg-black flex items-center justify-center">
+                       <span className="text-white font-mono font-black text-xl">{deviceDraft.plate || '---'}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* ================= COLUMN 3: BOOKING (Span 4) ================= */}
+        <section className="xl:col-span-4 flex flex-col gap-4 min-h-0">
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 flex flex-col gap-4 h-full overflow-y-auto min-h-0">
+            <h3 className="font-bold text-slate-800 text-sm mb-1 shrink-0">Xác minh xe vào</h3>
+            
+            <div className="flex bg-slate-100 p-1 rounded-lg">
+              <button 
+                onClick={clearBooking}
+                className={`flex-1 py-2 text-xs font-bold rounded-md transition ${!hasBooking ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-200'}`}
+              >
+                Không Booking
+              </button>
+              <button 
+                className={`flex-1 py-2 text-xs font-bold rounded-md transition ${hasBooking ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-200'}`}
+              >
+                Có Booking
+              </button>
+            </div>
+
+            {hasBooking ? (
+               <div className="flex flex-col items-center justify-center py-6 gap-2 text-center flex-1">
+                 <QrCode className="w-12 h-12 text-indigo-600 mb-2" />
+                 <h4 className="font-black text-slate-800 uppercase">Khách Đặt Trước</h4>
+                 <p className="text-xs text-slate-500">Đã tìm thấy booking {selectedBooking.id}</p>
+                 <Select value={selectedBookingId || undefined} onValueChange={handleBookingChange}>
+                    <SelectTrigger className="w-full mt-4 h-9 font-bold text-xs border-slate-300">
+                      <SelectValue placeholder="Chọn booking" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        {paidBookings.map((b) => (
+                          <SelectItem key={b.id} value={b.id}>
+                            {b.id} - {b.plate}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+               </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-4 gap-2 text-center flex-1">
+                <CarFront className="w-12 h-12 text-slate-700 mb-2 opacity-80" />
+                <h4 className="font-black text-slate-800 uppercase tracking-wide">Khách vãng lai</h4>
+                <p className="text-xs text-slate-500 max-w-[200px]">Xe vào không có booking. Vui lòng kiểm tra thông tin và tạo phiên đỗ xe.</p>
+              </div>
+            )}
+
+            <div className="flex flex-col gap-2 mt-auto border-t border-slate-100 pt-4">
+              <div className="flex items-center justify-between text-xs p-2 border border-slate-100 rounded bg-slate-50">
+                <span className="text-slate-500 font-semibold flex items-center gap-1.5"><CarFront className="w-3.5 h-3.5"/> Tổng số chỗ trống</span>
+                <span className="font-black text-blue-600">58 / 138</span>
+              </div>
+              <div className="flex items-center justify-between text-xs p-2 border border-slate-100 rounded bg-slate-50">
+                <span className="text-slate-500 font-semibold flex items-center gap-1.5"><RefreshCw className="w-3.5 h-3.5"/> Tỷ lệ sử dụng</span>
+                <span className="font-black text-emerald-600">42%</span>
+              </div>
+              <div className="flex items-center justify-between text-xs p-2 border border-slate-100 rounded bg-slate-50">
+                <span className="text-slate-500 font-semibold flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5"/> Chỗ trống gần nhất</span>
+                <span className="font-bold text-purple-700">B2 - A12 (25m)</span>
+              </div>
+            </div>
+
+            <div className={`mt-2 p-3 rounded-lg border flex gap-3 ${isCardValid ? 'bg-emerald-50 border-emerald-200' : 'bg-amber-50 border-amber-200'}`}>
+              <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${isCardValid ? 'bg-emerald-500 text-white' : 'bg-amber-400 text-amber-900'}`}>
+                {isCardValid ? <Check className="w-4 h-4 font-bold" /> : <CardIcon className="w-4 h-4" />}
+              </div>
+              <div className="flex flex-col justify-center">
+                <span className={`text-xs font-bold ${isCardValid ? 'text-emerald-800' : 'text-amber-800'}`}>{isCardValid ? 'Đã nhận thẻ' : 'Chờ quét thẻ...'}</span>
+                <span className={`text-[10px] ${isCardValid ? 'text-emerald-600' : 'text-amber-700'}`}>{isCardValid ? `Mã thẻ: ${deviceDraft.cardCode}` : 'Đưa thẻ vào đầu đọc để kiểm tra.'}</span>
+              </div>
+            </div>
+            
+            <p className="text-[10px] text-blue-600 text-center font-semibold bg-blue-50 py-1.5 rounded-full mt-1">
+              ⓘ Quét thẻ để tiếp tục quy trình xe vào
+            </p>
+          </div>
+        </section>
+
+        {/* ================= BOTTOM LEFT: CHECKLIST (Span 4) ================= */}
+        <section className="xl:col-span-4 bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col min-h-0">
+          <div className="p-3 border-b flex items-center gap-2 bg-white shrink-0">
+            <span className="flex items-center justify-center w-5 h-5 rounded-full bg-indigo-600 text-white font-bold text-[10px]">3</span>
+            <h3 className="font-bold text-slate-800 text-sm">Kiểm tra hệ thống</h3>
+          </div>
+          <div className="p-4 flex flex-col gap-0 flex-1 overflow-y-auto min-h-0">
+            <CheckRow label="Thẻ hợp lệ" isPass={isCardValid} falseLabel="Thẻ không hợp lệ" actionText="Kiểm tra thẻ" />
+            <CheckRow label="Không có phiên đang mở" isPass={true} actionText="OK" />
+            <CheckRow label="Loại xe hợp lệ" isPass={isVehicleTypeValid} actionText={deviceDraft.vehicleTypeName} />
+            <CheckRow label="Đủ biển nhận diện" isPass={isPlateValid} falseLabel="Thiếu biển nhận diện" actionText="OK" />
+            <CheckRow label="Barrier & cổng vào" isPass={true} actionText="OK" />
+            
+            <div className={`mt-auto p-3 rounded border flex gap-3 ${allChecksPassed ? 'bg-emerald-50 border-emerald-100 text-emerald-800' : 'bg-slate-50 border-slate-100 text-slate-600'}`}>
+              {allChecksPassed ? <CheckCircle2 className="w-5 h-5 shrink-0 text-emerald-600" /> : <AlertTriangle className="w-5 h-5 shrink-0" />}
+              <span className="text-xs font-bold leading-5">
+                {allChecksPassed ? "Tất cả điều kiện hợp lệ. Có thể tạo phiên đỗ xe." : "Vui lòng hoàn thiện các điều kiện để tiếp tục."}
+              </span>
+            </div>
+          </div>
+        </section>
+
+        {/* ================= BOTTOM MIDDLE: SUGGESTION MAP (Span 4) ================= */}
+        <section className="xl:col-span-4 bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col min-h-0">
+          <div className="p-3 border-b flex items-center justify-between bg-white shrink-0">
+             <div className="flex items-center gap-2">
+                <span className="flex items-center justify-center w-5 h-5 rounded-full bg-indigo-600 text-white font-bold text-[10px]">4</span>
+                <h3 className="font-bold text-slate-800 text-sm">Gợi ý vị trí đỗ</h3>
+             </div>
+             <span className="text-[9px] text-slate-400">ⓘ Dựa trên loại xe và khoảng cách.</span>
+          </div>
+          
+          <div className="flex flex-1 p-3 gap-3 overflow-hidden min-h-0">
+             {/* List */}
+             <div className="flex flex-col gap-2 w-1/3 min-w-[120px] overflow-y-auto pr-1">
+                <div className="border border-indigo-200 bg-indigo-50 rounded p-2 shadow-sm">
+                   <p className="text-[10px] font-bold text-indigo-800 uppercase mb-1">Ô TÔ TIỆN TÀI</p>
+                   <div className="flex justify-between items-center text-xs font-bold text-slate-700"><span>B2 - A12</span><span className="text-emerald-600">25m</span></div>
+                   <div className="flex justify-between items-center text-xs text-slate-600 mt-1"><span>B2 - A15</span><span className="text-emerald-600 font-semibold">32m</span></div>
+                   <div className="flex justify-between items-center text-xs text-slate-600 mt-1"><span>B2 - A16</span><span className="text-emerald-600 font-semibold">35m</span></div>
+                </div>
+                <div className="border border-slate-100 rounded p-2 hover:bg-slate-50 transition cursor-pointer">
+                   <p className="text-[10px] font-bold text-slate-500 uppercase mb-1">Ô TÔ THƯỜNG</p>
+                   <div className="flex justify-between items-center text-xs text-slate-600"><span>B2 - B23</span><span className="text-emerald-600 font-semibold">45m</span></div>
+                </div>
+                <div className="border border-slate-100 rounded p-2 hover:bg-slate-50 transition cursor-pointer">
+                   <p className="text-[10px] font-bold text-slate-500 uppercase mb-1">XE MÁY</p>
+                   <div className="flex justify-between items-center text-xs text-slate-600"><span>B1 - M15</span><span className="text-emerald-600 font-semibold">28m</span></div>
+                </div>
+             </div>
+             
+             {/* Map Mockup */}
+             <div className="flex-1 bg-slate-50 border border-slate-100 rounded-lg p-2 relative flex flex-col">
+                <p className="text-[10px] font-bold text-slate-800 mb-2">Tầng B2 - Khu A</p>
+                <div className="flex-1 flex flex-col justify-center gap-2 items-center">
+                   {/* Top Row Slots */}
+                   <div className="flex gap-1">
+                      {[1,2,3,4,5,6].map(i => (
+                        <div key={`t${i}`} className={`w-6 h-10 rounded-sm border ${i===3 ? 'bg-slate-200 border-slate-300' : 'bg-emerald-100 border-emerald-200'}`}></div>
+                      ))}
+                   </div>
+                   {/* Path */}
+                   <div className="w-full h-4 relative flex items-center px-4">
+                      <div className="w-full h-px border-t-2 border-dashed border-indigo-400"></div>
+                      <CarFront className="w-4 h-4 text-indigo-600 absolute left-4 -top-2 bg-slate-50 px-0.5" />
+                      <div className="w-4 h-4 bg-blue-600 text-white rounded text-[8px] flex items-center justify-center absolute right-10 -top-2 font-bold shadow-sm">P</div>
+                   </div>
+                   {/* Bottom Row Slots */}
+                   <div className="flex gap-1">
+                      {[1,2,3,4,5,6].map(i => (
+                        <div key={`b${i}`} className={`w-6 h-10 rounded-sm border ${i===5 ? 'bg-blue-500 border-blue-600' : 'bg-emerald-100 border-emerald-200'}`}></div>
+                      ))}
+                   </div>
+                </div>
+                <div className="flex justify-center gap-4 mt-2 text-[8px] font-semibold text-slate-500">
+                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-400"></span> Trống</span>
+                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-slate-300"></span> Đã chiếm</span>
+                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-500"></span> Đang chọn</span>
+                </div>
+             </div>
+          </div>
+        </section>
+
+        {/* ================= BOTTOM RIGHT: ACTIONS (Span 4) ================= */}
+        <section className="xl:col-span-4 bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col min-h-0">
+          <div className="p-3 border-b flex items-center gap-2 bg-white shrink-0">
+            <span className="flex items-center justify-center w-5 h-5 rounded-full bg-indigo-600 text-white font-bold text-[10px]">5</span>
+            <h3 className="font-bold text-slate-800 text-sm">Thao tác</h3>
+          </div>
+          <div className="p-5 flex-1 grid grid-cols-2 gap-3 content-start overflow-y-auto min-h-0">
+             <Button 
+               onClick={handleConfirmEntry} 
+               disabled={!allChecksPassed || isConfirming}
+               className="h-14 font-bold shadow-sm bg-blue-600 hover:bg-blue-700 text-white text-sm"
+             >
+               {isConfirming ? <RefreshCw className="w-5 h-5 mr-2 animate-spin" /> : <div className="w-5 h-5 mr-2 rounded bg-white/20 flex items-center justify-center text-[10px]">P</div>}
+               Tạo phiên đỗ xe
+             </Button>
+
+             <Button variant="outline" className="h-14 font-bold border-slate-200 text-slate-700 hover:bg-slate-50">
+               <CardIcon className="w-5 h-5 mr-2 text-indigo-600" />
+               Quét thẻ
+             </Button>
+
+             <Button variant="outline" className="h-14 font-bold border-slate-200 text-slate-700 hover:bg-slate-50">
+               <Camera className="w-5 h-5 mr-2 text-emerald-600" />
+               Quét biển số
+             </Button>
+
+             <Button variant="outline" className="h-14 font-bold border-slate-200 text-slate-700 hover:bg-slate-50">
+               <RefreshCw className="w-5 h-5 mr-2 text-amber-500" />
+               Kiểm tra lại
+             </Button>
+
+             <Button variant="ghost" className="col-span-2 h-14 font-bold text-rose-600 hover:bg-rose-50 mt-2">
+               <XCircle className="w-5 h-5 mr-2" />
+               Hủy giao dịch
+             </Button>
+          </div>
+        </section>
+
+      </main>
+      
+      <div className="mt-4 flex items-center gap-2 text-[10px] text-slate-400 font-semibold">
+        ⓘ Thời gian xử lý mục tiêu: 3 - 5 giây / lượt xe vào
       </div>
 
-      <BookingDetailsDialog
-        open={isBookingDetailsOpen}
-        onOpenChange={setIsBookingDetailsOpen}
-        booking={selectedBooking}
-        windowInfo={selectedBookingWindow}
-      />
       <ImagePreviewDialog preview={previewImage} onOpenChange={(open) => !open && setPreviewImage(null)} />
     </div>
   );
 }
 
-function DeviceStrip({ event, successMsg }) {
-  if (successMsg) {
-    return (
-      <div className="flex shrink-0 items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-800">
-        <CheckCircle2 className="mt-0.5 shrink-0" />
-        <span className="line-clamp-2">{successMsg}</span>
-      </div>
-    );
-  }
-
-  if (!event) {
-    return (
-      <div className="flex shrink-0 items-center justify-between gap-3 rounded-xl border bg-card px-4 py-3 text-sm">
-        <div className="flex min-w-0 items-center gap-3">
-          <RadioTower className="shrink-0 text-muted-foreground" />
-          <span className="truncate font-bold text-muted-foreground">Đang chờ tín hiệu từ thiết bị cổng vào</span>
-        </div>
-        <Badge variant="outline">READY</Badge>
-      </div>
-    );
-  }
-
+// Sub components
+function CheckRow({ label, isPass, falseLabel, actionText }) {
   return (
-    <div className="flex shrink-0 flex-col gap-2 rounded-xl border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm text-cyan-950 md:flex-row md:items-center md:justify-between">
-      <div className="flex min-w-0 items-center gap-3">
-        <RadioTower className="shrink-0" />
-        <div className="min-w-0">
-          <p className="truncate font-black">Dữ liệu từ thiết bị giả lập</p>
-          <p className="truncate text-xs font-semibold text-cyan-800">
-            {event.gateCode} gửi {event.scanType} lúc {formatDateTime(event.capturedAt)}
-          </p>
-        </div>
-      </div>
-      <div className="truncate font-mono text-xs font-black">
-        {event.cardCode || event.bookingId || event.qrToken || event.detectedPlate || "--"}
-      </div>
-    </div>
-  );
-}
-
-function CameraFeed({ title, image, onPreview }) {
-  return (
-    <Card className="min-h-0 flex-1 bg-slate-950 text-white">
-      <CardContent className="h-full p-0">
-        <button
-          type="button"
-          onClick={onPreview}
-          className="relative flex h-full min-h-[18rem] w-full items-center justify-center overflow-hidden text-left lg:min-h-0"
-        >
-          {image ? (
-            <img src={image} alt={title} width="960" height="540" className="h-full w-full object-cover" />
-          ) : (
-            <div className="flex flex-col items-center gap-3 text-slate-500">
-              <Camera className="size-12" />
-              <p className="font-mono text-xs font-bold uppercase tracking-widest">Camera feed stream</p>
-            </div>
-          )}
-          <div className="absolute left-4 top-4 flex items-center gap-2 rounded-md bg-black/55 px-2 py-1 text-xs font-black">
-            <span className="size-2 rounded-full bg-red-500" />
-            REC
-          </div>
-          <div className="absolute right-4 top-4 rounded-md bg-black/45 p-2">
-            <Maximize2 />
-          </div>
-        </button>
-      </CardContent>
-    </Card>
-  );
-}
-
-function SnapshotTile({ title, image, onPreview }) {
-  return (
-    <Card className="min-w-0">
-      <CardContent className="p-3">
-        <button type="button" onClick={onPreview} className="flex w-full min-w-0 items-center gap-3 text-left">
-          <div className="flex aspect-video w-28 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-muted/40">
-            {image ? (
-              <img src={image} alt={title} width="160" height="90" className="h-full w-full object-cover" />
-            ) : (
-              <ImageIcon className="text-muted-foreground" />
-            )}
-          </div>
-          <div className="min-w-0">
-            <p className="truncate font-black">{title}</p>
-            <p className="mt-1 text-xs font-semibold text-muted-foreground">
-              {image ? "Bấm để xem lớn" : "Chưa có ảnh"}
-            </p>
-          </div>
-        </button>
-      </CardContent>
-    </Card>
-  );
-}
-
-function RecognitionPanel({ draft }) {
-  return (
-    <Card className="min-w-0">
-      <CardContent className="flex h-full items-center gap-3 p-3">
-        <div className="min-w-0 flex-1">
-          <p className="text-xs font-black uppercase text-muted-foreground">OCR biển số</p>
-          <p className="truncate font-mono text-2xl font-black">{draft.plate || "-- --"}</p>
-          <p className="mt-1 text-xs font-semibold text-muted-foreground">
-            {draft.vehicleTypeName} · {draft.plateConfidence || 0}% · {draft.gateCode}
-          </p>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function CommandPanel({
-  bookingScan,
-  paidBookings,
-  selectedBookingId,
-  selectedBooking,
-  selectedBookingWindow,
-  isBookingLoading,
-  deviceDraft,
-  setDeviceDraft,
-  hasUsableBooking,
-  isConfirming,
-  onBookingChange,
-  onRefresh,
-  onClearBooking,
-  onOpenBookingDetails,
-  onConfirm,
-}) {
-  const isBookingExpired = selectedBookingWindow && ["expired", "invalid"].includes(selectedBookingWindow.variant);
-  const bookingOptions = selectedBooking && !paidBookings.some((booking) => booking.id === selectedBooking.id)
-    ? [selectedBooking, ...paidBookings]
-    : paidBookings;
-  const bookingState = selectedBooking
-    ? selectedBookingWindow?.variant || "valid"
-    : bookingScan.status === "not-found" || bookingScan.status === "invalid"
-      ? "warning"
-      : "idle";
-
-  return (
-    <Card className="min-h-0 min-w-0 overflow-hidden">
-      <CardHeader className="shrink-0 border-b">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <CardTitle>Control desk</CardTitle>
-            <p className="mt-1 text-sm text-muted-foreground">Tất cả tín hiệu quyết định vào bãi trong một khung.</p>
-          </div>
-          <Button type="button" variant="ghost" size="icon" onClick={onRefresh} aria-label="Tải lại booking">
-            <RefreshCw />
-          </Button>
-        </div>
-      </CardHeader>
-
-      <CardContent className="flex min-h-0 flex-1 flex-col gap-3 p-4 lg:overflow-hidden">
-        <div className="grid shrink-0 gap-2 sm:grid-cols-3">
-          <StatusTile
-            icon={QrCode}
-            label="Booking"
-            value={selectedBooking?.id || bookingScan.requestedId || "Không có"}
-            detail={selectedBooking ? selectedBookingWindow?.label : bookingScan.status === "not-found" ? "Không khớp" : "Tùy chọn"}
-            tone={bookingState}
-          />
-          <StatusTile
-            icon={CreditCard}
-            label="Thẻ NFC"
-            value={deviceDraft.cardCode || "Chờ thẻ"}
-            detail={deviceDraft.cardCode ? "Đã nhận" : "Bắt buộc"}
-            tone={deviceDraft.cardCode ? "done" : "idle"}
-          />
-          <StatusTile
-            icon={CarFront}
-            label="Biển số"
-            value={deviceDraft.plate || "Chưa có"}
-            detail={deviceDraft.plate ? `${deviceDraft.plateConfidence || 0}% OCR` : "Bắt buộc"}
-            tone={deviceDraft.plate ? "done" : "idle"}
-          />
-        </div>
-
-        <div className="grid shrink-0 gap-3 xl:grid-cols-[minmax(0,1fr)_auto]">
-          <Field label="Booking QR">
-            {bookingOptions.length === 0 ? (
-              <div className="rounded-lg border bg-muted/40 px-3 py-2 text-xs font-semibold text-muted-foreground">
-                Không có booking đang chờ.
-              </div>
-            ) : (
-              <Select value={selectedBookingId || undefined} onValueChange={onBookingChange}>
-                <SelectTrigger className="w-full font-mono">
-                  <SelectValue placeholder="Không gắn booking" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    {bookingOptions.map((booking) => (
-                      <SelectItem key={booking.id} value={booking.id}>
-                        {booking.id} ({booking.username} - {booking.vehicleTypeName} - {booking.status})
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-            )}
-          </Field>
-          <div className="flex items-end gap-2">
-            <Button type="button" variant="outline" disabled={!selectedBooking} onClick={onOpenBookingDetails}>
-              <QrCode data-icon="inline-start" />
-              Chi tiết
-            </Button>
-            {selectedBooking && (
-              <Button type="button" variant="ghost" onClick={onClearBooking}>
-                <XCircle data-icon="inline-start" />
-                Bỏ
-              </Button>
-            )}
-          </div>
-        </div>
-
-        <BookingCompactSummary
-          bookingScan={bookingScan}
-          selectedBooking={selectedBooking}
-          selectedBookingWindow={selectedBookingWindow}
-          isLoading={isBookingLoading}
-        />
-
-        {isBookingExpired && (
-          <ExpiredBookingDecision
-            booking={selectedBooking}
-            windowInfo={selectedBookingWindow}
-            onClearBooking={onClearBooking}
-            onOpenBookingDetails={onOpenBookingDetails}
-          />
-        )}
-
-        <div className="grid shrink-0 gap-3 sm:grid-cols-2">
-          <Field label="Mã thẻ NFC">
-            <Input
-              value={deviceDraft.cardCode}
-              onChange={(event) => setDeviceDraft((current) => ({ ...current, cardCode: event.target.value.toUpperCase() }))}
-              placeholder="CARD-0002"
-              className="font-mono font-bold"
-            />
-          </Field>
-          <Field label="Biển số xe">
-            <Input
-              value={deviceDraft.plate}
-              onChange={(event) => setDeviceDraft((current) => ({ ...current, plate: event.target.value.toUpperCase() }))}
-              placeholder="51A-12345"
-              className="font-mono font-bold"
-            />
-          </Field>
-          <Field label="Loại xe">
-            <Select
-              value={deviceDraft.vehicleTypeName}
-              onValueChange={(value) => setDeviceDraft((current) => ({ ...current, vehicleTypeName: value }))}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  {vehicleTypes.map((type) => (
-                    <SelectItem key={type} value={type}>
-                      {type}
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-          </Field>
-          <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
-            <p className="text-xs font-black uppercase text-emerald-700">Slot/gate</p>
-            <p className="truncate font-mono text-lg font-black text-emerald-800">
-              {selectedBooking?.internalSlotCode || "B1-A / AUTO"}
-            </p>
-            <p className="truncate text-xs font-semibold text-emerald-700">
-              {selectedBooking ? "Slot đã giữ theo booking" : deviceDraft.gateCode}
-            </p>
-          </div>
-        </div>
-
-        {false && isBookingExpired && (
-          <div className="flex shrink-0 gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-xs font-semibold leading-5 text-red-800">
-            <AlertTriangle className="shrink-0" />
-            <span>Booking không còn hợp lệ để gắn vào phiên. Bỏ booking để xử lý như khách vãng lai.</span>
-          </div>
-        )}
-
-        <div className="mt-auto grid shrink-0 gap-2 border-t pt-3 sm:grid-cols-[1fr_auto]">
-          <Button
-            onClick={onConfirm}
-            disabled={isConfirming || Boolean(selectedBooking && !hasUsableBooking)}
-            className="h-11"
-          >
-            {isConfirming ? (
-              <>
-                <RefreshCw data-icon="inline-start" className="animate-spin" />
-                Đang xác nhận...
-              </>
-            ) : (
-              <>
-                <CheckCircle2 data-icon="inline-start" />
-                {selectedBooking ? "Gắn booking và cho vào" : "Cho vào vãng lai"}
-              </>
-            )}
-          </Button>
-          {false && isBookingExpired && (
-            <Button type="button" variant="outline" onClick={onClearBooking}>
-              <ShieldCheck data-icon="inline-start" />
-              Vãng lai
-            </Button>
-          )}
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function ExpiredBookingDecision({ booking, windowInfo, onClearBooking, onOpenBookingDetails }) {
-  return (
-    <div className="shrink-0 rounded-xl border border-red-200 bg-red-50 p-3 text-red-900">
-      <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-        <div className="flex min-w-0 gap-3">
-          <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-red-100">
-            <AlertTriangle className="size-5" />
-          </div>
-          <div className="min-w-0">
-            <p className="text-sm font-black">Xử lý booking quá hạn</p>
-            <p className="mt-1 text-xs font-semibold leading-5">
-              {booking?.id || "Booking"} không còn hợp lệ để gắn vào phiên. Chuyển sang vãng lai sẽ bỏ booking này,
-              giữ lại biển số/OCR và cho Staff quét thẻ NFC như khách không đặt trước.
-            </p>
-            <p className="mt-1 truncate text-xs font-bold text-red-700">
-              {windowInfo?.message || "Booking đã quá hạn check-in."}
-            </p>
-          </div>
-        </div>
-        <div className="grid shrink-0 gap-2 sm:grid-cols-2 xl:w-64">
-          <Button type="button" variant="destructive" onClick={onClearBooking} className="h-10">
-            <ShieldCheck data-icon="inline-start" />
-            Chuyển vãng lai
-          </Button>
-          <Button type="button" variant="outline" onClick={onOpenBookingDetails} className="h-10 border-red-200 bg-white">
-            <QrCode data-icon="inline-start" />
-            Chi tiết
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function StatusTile({ icon: Icon, label, value, detail, tone }) {
-  return (
-    <div className={cn("min-w-0 rounded-xl border p-3", getStatusTone(tone))}>
-      <div className="flex items-center gap-2">
-        <Icon className="shrink-0" />
-        <span className="text-xs font-black uppercase">{label}</span>
-      </div>
-      <p className="mt-2 truncate font-mono text-base font-black">{value}</p>
-      <p className="truncate text-xs font-semibold">{detail}</p>
-    </div>
-  );
-}
-
-function BookingCompactSummary({ bookingScan, selectedBooking, selectedBookingWindow, isLoading }) {
-  if (isLoading || bookingScan.status === "checking") {
-    return (
-      <div className="shrink-0 rounded-xl border bg-muted/40 p-3 text-sm font-semibold text-muted-foreground">
-        Đang tải và đối chiếu booking...
-      </div>
-    );
-  }
-
-  if (!selectedBooking) {
-    const isProblem = bookingScan.status === "not-found" || bookingScan.status === "invalid";
-    return (
-      <div className={cn("flex shrink-0 gap-2 rounded-xl border p-3 text-xs font-semibold leading-5", isProblem ? "border-amber-200 bg-amber-50 text-amber-800" : "bg-muted/35 text-muted-foreground")}>
-        {isProblem ? <AlertTriangle className="shrink-0" /> : <Clock3 className="shrink-0" />}
-        <span>{isProblem ? `QR ${bookingScan.requestedId || "thiết bị gửi"} không hợp lệ. Có thể xử lý vãng lai bằng NFC.` : "Chưa có booking QR. Khách vãng lai chỉ cần NFC và biển số."}</span>
-      </div>
-    );
-  }
-
-  return (
-    <div className={cn("shrink-0 rounded-xl border p-3", getStatusTone(selectedBookingWindow?.variant || "valid"))}>
-      <div className="flex items-center justify-between gap-3">
-        <div className="min-w-0">
-          <p className="truncate font-mono text-lg font-black">{selectedBooking.id}</p>
-          <p className="truncate text-xs font-semibold">
-            {selectedBooking.username} · {selectedBooking.vehicleTypeName} · {selectedBooking.internalSlotCode}
-          </p>
-        </div>
-        <Badge variant="outline" className={cn("shrink-0 rounded-md", getStatusTone(selectedBookingWindow?.variant || "valid"))}>
-          {selectedBookingWindow?.label || selectedBooking.status}
-        </Badge>
-      </div>
-      <p className="mt-2 line-clamp-2 text-xs font-semibold">{selectedBookingWindow?.message}</p>
-    </div>
-  );
-}
-
-function BookingDetailsDialog({ open, onOpenChange, booking, windowInfo }) {
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[88dvh] overflow-y-auto sm:max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>Chi tiết booking</DialogTitle>
-          <DialogDescription>Thông tin đối chiếu QR đặt chỗ trước khi gắn thẻ NFC.</DialogDescription>
-        </DialogHeader>
-
-        {booking ? (
-          <div className="grid gap-3 sm:grid-cols-2">
-            <DetailBox label="Mã booking" value={booking.id} mono />
-            <DetailBox label="Trạng thái" value={windowInfo?.label || booking.status} />
-            <DetailBox label="Người đặt chỗ" value={booking.username} />
-            <DetailBox label="Loại xe đăng ký" value={booking.vehicleTypeName} />
-            <DetailBox label="Khu vực" value={booking.areaName} />
-            <DetailBox label="Slot giữ chỗ" value={booking.internalSlotCode} mono />
-            <DetailBox label="Phí đã thanh toán" value={formatMoney(booking.reservationFee)} />
-            <DetailBox label="Thanh toán lúc" value={formatDateTime(booking.paidAt || booking.createdAt)} />
-            <DetailBox label="Hạn check-in" value={formatDateTime(windowInfo?.checkInExpiry)} />
-            <DetailBox label="Gia hạn đến" value={formatDateTime(windowInfo?.graceExpiry)} />
-            <div className="rounded-xl border bg-muted/35 p-3 sm:col-span-2">
-              <p className="text-xs font-black uppercase text-muted-foreground">Đánh giá</p>
-              <p className="mt-1 text-sm font-semibold">{windowInfo?.message || "--"}</p>
-            </div>
+    <div className="flex items-center justify-between py-3 border-b border-slate-100 last:border-0 border-dashed">
+      <div className="flex items-center gap-3">
+        {isPass ? (
+          <div className="w-5 h-5 rounded-full bg-emerald-100 flex items-center justify-center">
+            <Check className="w-3.5 h-3.5 text-emerald-600" />
           </div>
         ) : (
-          <div className="rounded-xl border bg-muted/35 p-4 text-sm font-semibold text-muted-foreground">
-            Chưa có booking để hiển thị.
+          <div className="w-5 h-5 rounded-full bg-rose-100 flex items-center justify-center">
+            <X className="w-3.5 h-3.5 text-rose-600" />
           </div>
         )}
-      </DialogContent>
-    </Dialog>
+        <span className={`text-sm font-semibold ${isPass ? 'text-slate-800' : 'text-slate-500 line-through opacity-70'}`}>
+          {isPass ? label : (falseLabel || label)}
+        </span>
+      </div>
+      <span className={`text-xs font-bold ${isPass ? 'text-emerald-600' : 'text-rose-500'}`}>
+        {actionText} {isPass ? <CheckCircle2 className="w-3.5 h-3.5 inline ml-1" /> : <XCircle className="w-3.5 h-3.5 inline ml-1" />}
+      </span>
+    </div>
   );
 }
 
 function ImagePreviewDialog({ preview, onOpenChange }) {
   return (
     <Dialog open={Boolean(preview)} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-4xl">
+      <DialogContent className="sm:max-w-4xl bg-white">
         <DialogHeader>
           <DialogTitle>{preview?.title || "Ảnh thiết bị"}</DialogTitle>
           <DialogDescription>Ảnh do thiết bị cổng gửi lên để Staff đối chiếu.</DialogDescription>
         </DialogHeader>
-        <div className="flex max-h-[72dvh] items-center justify-center overflow-hidden rounded-xl border bg-muted/35">
+        <div className="flex max-h-[72dvh] items-center justify-center overflow-hidden rounded-xl border bg-slate-50">
           {preview?.image ? (
             <img src={preview.image} alt={preview.title} className="max-h-[72dvh] w-full object-contain" />
           ) : (
-            <div className="flex min-h-80 flex-col items-center justify-center gap-3 text-muted-foreground">
+            <div className="flex min-h-80 flex-col items-center justify-center gap-3 text-slate-400">
               <ImageIcon className="size-12" />
               <p className="text-sm font-bold">Chưa có ảnh từ thiết bị</p>
             </div>
@@ -966,23 +886,5 @@ function ImagePreviewDialog({ preview, onOpenChange }) {
         </div>
       </DialogContent>
     </Dialog>
-  );
-}
-
-function Field({ label, children }) {
-  return (
-    <label className="flex min-w-0 flex-col gap-1.5">
-      <span className="text-xs font-black uppercase tracking-wide text-muted-foreground">{label}</span>
-      {children}
-    </label>
-  );
-}
-
-function DetailBox({ label, value, mono }) {
-  return (
-    <div className="min-w-0 rounded-xl border bg-muted/35 p-3">
-      <p className="text-xs font-black uppercase text-muted-foreground">{label}</p>
-      <p className={cn("mt-1 truncate text-sm font-bold", mono && "font-mono font-black")}>{value || "--"}</p>
-    </div>
   );
 }

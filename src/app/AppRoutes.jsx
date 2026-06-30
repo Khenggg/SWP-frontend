@@ -13,6 +13,8 @@ import RulesPage from "../pages/public/RulesPage";
 import PublicPricingPage from "../pages/public/PublicPricingPage";
 import AvailableSlotsPage from "../pages/public/AvailableSlotsPage";
 import QRLookupPage from "../pages/public/QRLookupPage";
+import RegisterPage from "../pages/public/RegisterPage";
+import ForgotPasswordPage from "../pages/public/ForgotPasswordPage";
 
 import UserManagementPage from "../pages/admin/UserManagementPage";
 import SessionsAdministrationPage from "../pages/admin/SessionsAdministrationPage";
@@ -26,6 +28,7 @@ import ReportsPage from "../pages/manager/ReportsPage";
 import LostCardApprovalsPage from "../pages/manager/LostCardApprovalsPage";
 import MismatchApprovalsPage from "../pages/manager/MismatchApprovalsPage";
 import AuditLogsPage from "../pages/manager/AuditLogsPage";
+import AdminAuditLogPage from "../pages/admin/AdminAuditLogPage";
 
 import StaffEntryPage from "../pages/staff/StaffEntryPage";
 import StaffExitPage from "../pages/staff/StaffExitPage";
@@ -36,7 +39,6 @@ import DriverProfilePage from "../pages/driver/DriverProfilePage";
 import DriverVehiclesPage from "../pages/driver/DriverVehiclesPage";
 import DriverHistoryPage from "../pages/driver/DriverHistoryPage";
 import DriverBookingPage from "../pages/driver/DriverBookingPage";
-import EntryPageTest from "../pages/EntryPageTest";
 
 const RequireAuth = ({ isAuthenticated }) => {
   return isAuthenticated ? <Outlet /> : <Navigate to="/login" replace />;
@@ -51,35 +53,34 @@ export default function AppRoutes({ isAuthenticated, userRole, currentUser, onLo
     <Routes>
       <Route element={<PublicLayout />}>
         <Route path="/" element={<ParkingInfoPage />} />
+        <Route path="/parking-info" element={<ParkingInfoPage />} />
         <Route path="/rules" element={<RulesPage />} />
         <Route path="/pricing" element={<PublicPricingPage />} />
         <Route path="/available-slots" element={<AvailableSlotsPage />} />
         <Route path="/card/:qrToken" element={<QRLookupPage />} />
-      </Route>
-
-      <Route path="/entry-test" element={<EntryPageTest />} />
-
-      <Route
-        path="/login"
-        element={
-          isAuthenticated ? (
-            userRole === USER_ROLES.ADMIN ? (
-              <Navigate to="/admin/users" replace />
-            ) : userRole === USER_ROLES.MANAGER ? (
-              <Navigate to="/manager/dashboard" replace />
-            ) : userRole === USER_ROLES.STAFF ? (
-              <Navigate to="/staff/entry" replace />
-            ) : userRole === USER_ROLES.DRIVER ? (
-              <Navigate to="/driver/profile" replace />
+        <Route path="/register" element={<RegisterPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route
+          path="/login"
+          element={
+            isAuthenticated ? (
+              userRole === USER_ROLES.ADMIN ? (
+                <Navigate to="/admin/users" replace />
+              ) : userRole === USER_ROLES.MANAGER ? (
+                <Navigate to="/manager/dashboard" replace />
+              ) : userRole === USER_ROLES.STAFF ? (
+                <Navigate to="/staff/entry" replace />
+              ) : userRole === USER_ROLES.DRIVER ? (
+                <Navigate to="/driver/profile" replace />
+              ) : (
+                <Navigate to="/" replace />
+              )
             ) : (
-              <Navigate to="/" replace />
+              <LoginPage onLoginSuccess={onLoginSuccess} />
             )
-          ) : (
-            <LoginPage onLoginSuccess={onLoginSuccess} />
-          )
-        }
-      />
-
+          }
+        />
+      </Route>
       <Route element={<RequireAuth isAuthenticated={isAuthenticated} />}>
         <Route element={<AppShell currentUser={currentUser} onLogout={onLogout} />}>
           <Route element={<RequireRole userRole={userRole} allowedRoles={[USER_ROLES.MANAGER]} />}>
@@ -96,7 +97,7 @@ export default function AppRoutes({ isAuthenticated, userRole, currentUser, onLo
 
           <Route element={<RequireRole userRole={userRole} allowedRoles={[USER_ROLES.ADMIN]} />}>
             <Route path="/admin/users" element={<UserManagementPage />} />
-            <Route path="/admin/audit-logs" element={<AuditLogsPage scope="admin" />} />
+            <Route path="/admin/audit-logs" element={<AdminAuditLogPage />} />
             <Route path="/admin/sessions-administration" element={<SessionsAdministrationPage />} />
           </Route>
 

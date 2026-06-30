@@ -11,6 +11,8 @@ export const MOCK_FLAGS = {
   MANAGER_PRICING: "VITE_MOCK_MANAGER_PRICING",
   ADMIN_USERS: "VITE_MOCK_ADMIN_USERS",
   MANAGER_DASHBOARD: "VITE_MOCK_MANAGER_DASHBOARD",
+  ADMIN_AUDIT: "VITE_MOCK_ADMIN_AUDIT",
+  ADMIN_SESSIONS: "VITE_MOCK_ADMIN_SESSIONS",
 };
 
 export const API_BASE_URLS = {
@@ -27,8 +29,9 @@ export function hasEnabledMocks() {
   if (import.meta.env.VITE_USE_MOCK !== "true") {
     return false;
   }
-  return Object.entries(import.meta.env).some(
-    ([key, value]) => key.startsWith("VITE_MOCK_") && value === "true"
+  // Avoid Object.entries(import.meta.env) which fails in Vite builds
+  return Object.values(MOCK_FLAGS).some(
+    (flag) => import.meta.env[flag] === "true"
   );
 }
 

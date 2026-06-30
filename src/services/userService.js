@@ -26,7 +26,7 @@ export const userService = {
   },
 
   updateUserRole: async (id, role) => {
-    const response = await coreAxiosClient.put(`/admin/users/${id}/role`, { role });
+    const response = await coreAxiosClient.patch(`/admin/users/${id}/role`, { role });
     if (response.success && response.data) {
       return response.data;
     }
@@ -34,7 +34,7 @@ export const userService = {
   },
 
   updateUserStatus: async (id, status) => {
-    const response = await coreAxiosClient.put(`/admin/users/${id}/status`, { status });
+    const response = await coreAxiosClient.patch(`/admin/users/${id}/status`, { status });
     if (response.success && response.data) {
       return response.data;
     }

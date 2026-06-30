@@ -14,7 +14,7 @@ export const MOCK_PARKING_INFO = {
   openingHours: "06:00 - 22:00",
   totalFloors: 3,
   totalAreas: 4,
-  totalSlots: 40,
+  totalCapacity: 40,
   availableSlots: 20,
   supportNote: "Hỗ trợ khách hàng từ 07:00 - 20:00 các ngày trong tuần. Hệ thống chỉ thực hiện giám sát & quản lý vị trí (slot) đỗ cho Xe Ô Tô tại Tầng B2. Xe Máy (Tầng B1) và Xe Vận Chuyển (Tầng B3) tự quản lý và đỗ theo điều phối.",
   lastUpdated: "2026-05-28T07:00:00Z",
@@ -259,78 +259,6 @@ export const MOCK_MONTHLY_PASSES = [
     startDate: "2026-05-01",
     endDate: "2026-06-30",
     status: "ACTIVE",
-  },
-];
-
-// ===========================================================================
-// STATIC RULES
-// ===========================================================================
-export const STATIC_RULES = [
-  {
-    id: "entry",
-    title: "Quy Định Vào Bãi",
-    icon: "→",
-    items: [
-      "Xuất trình thẻ từ hoặc thẻ vé tháng tại cổng vào.",
-      "Nhân viên sẽ ghi nhận biển số xe và phân slot đỗ.",
-      "Xe không có biển số phải khai báo mô tả xe cụ thể.",
-      "Không được vào bãi khi thẻ đang ở trạng thái LOST/DAMAGED.",
-    ],
-  },
-  {
-    id: "exit",
-    title: "Quy Định Ra Bãi",
-    icon: "←",
-    items: [
-      "Xuất trình thẻ và đọc biển số xe tại cổng ra.",
-      "Thanh toán phí gửi xe trước khi hoàn tất lượt.",
-      "Biển số xe ra phải khớp với biển số xe vào.",
-      "Thời gian tính phí từ lúc xe vào đến lúc xe ra.",
-    ],
-  },
-  {
-    id: "lost-card",
-    title: "Quy Định Mất Thẻ",
-    icon: "⚠",
-    items: [
-      "Báo ngay với nhân viên tại quầy khi mất thẻ.",
-      "Nhân viên tạo hồ sơ mất thẻ và thu thêm phí mất thẻ theo bảng giá.",
-      "Hồ sơ mất thẻ cần được Quản Lý phê duyệt trước khi xe ra.",
-      "Phí mất thẻ: Xe Máy 50.000đ | Ô Tô 100.000đ | Xe Đạp 30.000đ.",
-    ],
-  },
-  {
-    id: "mismatch",
-    title: "Quy Định Sai Biển Số",
-    icon: "🔄",
-    items: [
-      "Nếu biển số xe ra không khớp biển số vào, nhân viên tạo hồ sơ sai biển số.",
-      "Quản Lý xem xét và phê duyệt hoặc từ chối.",
-      "Khách hàng cần xuất trình giấy tờ xe để xác minh.",
-      "Không được hoàn tất lượt gửi nếu hồ sơ chưa được phê duyệt.",
-    ],
-  },
-  {
-    id: "monthly",
-    title: "Quy Định Vé Tháng",
-    icon: "📅",
-    items: [
-      "Vé tháng được đăng ký theo biển số xe và loại xe cụ thể.",
-      "Phải gia hạn trước ngày hết hạn để không bị gián đoạn.",
-      "Vé tháng bị khóa không được dùng cho đến khi được kích hoạt lại.",
-      "Chỉ 1 vé tháng ACTIVE cho mỗi biển số + loại xe cùng thời điểm.",
-    ],
-  },
-  {
-    id: "contact",
-    title: "Liên Hệ Hỗ Trợ",
-    icon: "📞",
-    items: [
-      "Hotline: 1800 1234 (miễn phí, 07:00 - 20:00)",
-      "Email: support@parking.vn",
-      "Quầy hỗ trợ: Tầng B1, cạnh cổng vào chính.",
-      "Khiếu nại trực tiếp với Quản Lý bãi trong giờ làm việc.",
-    ],
   },
 ];
 

@@ -4,11 +4,17 @@ const SESSION_KEY = "currentUser";
 
 export const authService = {
   login: async (username, password) => {
-    const response = await coreAxiosClient.post("/auth/login", { username, password });
-    if (response.success && response.data) {
-      return response.data; // contains { token, user }
+    try {
+      const response = await coreAxiosClient.post("/auth/login", { username, password });
+      if (response.success && response.data) {
+        return response.data; // contains { token, user }
+      }
+      throw new Error(response.message || "Tên đăng nhập hoặc mật khẩu không chính xác.");
+    } catch (err) {
+      // Bất kể Backend (.NET) trả về tiếng Anh ("Login failed", "Incorrect username or password."),
+      // ta chủ động đè lại bằng tiếng Việt để giao diện thân thiện với người dùng.
+      throw new Error("Tên đăng nhập hoặc mật khẩu không chính xác.");
     }
-    throw new Error(response.message || "Tên đăng nhập hoặc mật khẩu không chính xác.");
   },
 
   logout: () => {

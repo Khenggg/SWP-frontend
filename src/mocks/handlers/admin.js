@@ -72,12 +72,12 @@ function publicLookupPayload(session) {
 }
 
 export const adminHandlers = [
-  http.get(`${API_BASE_URLS.core}/admin/sessions/active`, async () => {
+  http.get(`${API_BASE_URLS.core}/parking-sessions/search`, async () => {
     await delay(150);
     return ok(sessionDb.getSessions().filter((session) => session.status === "ACTIVE"));
   }),
 
-  http.post(`${API_BASE_URLS.core}/admin/sessions/:sessionId/force-close`, async ({ params, request }) => {
+  http.post(`${API_BASE_URLS.core}/parking-sessions/:sessionId/force-close`, async ({ params, request }) => {
     await delay(200);
     const { reason } = await request.json();
     const sessions = sessionDb.getSessions();
@@ -93,7 +93,7 @@ export const adminHandlers = [
     return ok(session);
   }),
 
-  http.post(`${API_BASE_URLS.core}/admin/sessions/:sessionId/cancel`, async ({ params, request }) => {
+  http.post(`${API_BASE_URLS.core}/parking-sessions/:sessionId/cancel`, async ({ params, request }) => {
     await delay(200);
     const { reason } = await request.json();
     const sessions = sessionDb.getSessions();
@@ -109,7 +109,7 @@ export const adminHandlers = [
     return ok(session);
   }),
 
-  http.post(`${API_BASE_URLS.core}/admin/sessions/:sessionId/move-slot`, async ({ params, request }) => {
+  http.post(`${API_BASE_URLS.core}/parking-sessions/:sessionId/move-slot`, async ({ params, request }) => {
     await delay(200);
     const { reason, newSlotId } = await request.json();
     const sessions = sessionDb.getSessions();
@@ -123,68 +123,116 @@ export const adminHandlers = [
     return ok(session);
   }),
 
-  http.get(`${API_BASE_URLS.core}/manager/approvals/lost-cards`, async () => {
+  http.get(`${API_BASE_URLS.core}/lost-card-cases`, async () => {
     await delay(150);
     return ok(sessionDb.getLostCards());
   }),
 
-  http.post(`${API_BASE_URLS.core}/manager/approvals/lost-cards/:caseId/decide`, async ({ params, request }) => {
+  http.post(`${API_BASE_URLS.core}/lost-card-cases/:caseId/approve`, async ({ params, request }) => {
     await delay(200);
-    const { decision, reason } = await request.json();
+    const { reason } = await request.json();
     const cases = sessionDb.getLostCards();
     const item = cases.find((caseItem) => Number(caseItem.id) === Number(params.caseId));
     if (!item) return notFound("Không tìm thấy hồ sơ báo mất thẻ.");
 
-    item.status = decision === "APPROVE" ? "APPROVED" : "REJECTED";
+    item.status = "APPROVED";
     item.decidedAt = new Date().toISOString();
     item.decidedBy = "manager01";
     item.decisionReason = reason;
     sessionDb.saveLostCards(cases);
-    sessionDb.addAuditLog("manager01", `LOST_CARD_${decision}`, `Hồ sơ ${item.caseCode}. Lý do: ${reason}`, "WARNING", "MANAGER");
     return ok(item);
   }),
 
-  http.get(`${API_BASE_URLS.core}/manager/approvals/mismatch`, async () => {
+  http.post(`${API_BASE_URLS.core}/lost-card-cases/:caseId/reject`, async ({ params, request }) => {
+    await delay(200);
+    const { reason } = await request.json();
+    const cases = sessionDb.getLostCards();
+    const item = cases.find((caseItem) => Number(caseItem.id) === Number(params.caseId));
+    if (!item) return notFound("Không tìm thấy hồ sơ báo mất thẻ.");
+
+    item.status = "REJECTED";
+    item.decidedAt = new Date().toISOString();
+    item.decidedBy = "manager01";
+    item.decisionReason = reason;
+    sessionDb.saveLostCards(cases);
+    return ok(item);
+  }),
+
+  http.get(`${API_BASE_URLS.core}/plate-mismatch-cases`, async () => {
     await delay(150);
     return ok(sessionDb.getMismatch());
   }),
 
-  http.post(`${API_BASE_URLS.core}/manager/approvals/mismatch/:caseId/decide`, async ({ params, request }) => {
+  http.post(`${API_BASE_URLS.core}/parking-sessions/:caseId/mismatch/confirm`, async ({ params, request }) => {
     await delay(200);
-    const { decision, reason } = await request.json();
+    const { reason } = await request.json();
     const cases = sessionDb.getMismatch();
-    const item = cases.find((caseItem) => Number(caseItem.id) === Number(params.caseId));
+    const item = cases.find((caseItem) => Number(caseItem.sessionId || caseItem.id) === Number(params.caseId));
     if (!item) return notFound("Không tìm thấy hồ sơ lệch biển số.");
 
-    item.status = decision === "APPROVE" ? "APPROVED" : "REJECTED";
+    item.status = "CONFIRMED";
     item.decidedAt = new Date().toISOString();
     item.decidedBy = "manager01";
     item.decisionReason = reason;
     sessionDb.saveMismatch(cases);
-    sessionDb.addAuditLog("manager01", `PLATE_MISMATCH_${decision}`, `Hồ sơ ${item.caseCode}. Lý do: ${reason}`, "WARNING", "MANAGER");
+    sessionDb.addAuditLog("manager01", `PLATE_MISMATCH_CONFIRM`, `Hồ sơ ${item.caseCode}. Lý do: ${reason}`, "WARNING", "MANAGER");
     return ok(item);
   }),
 
-  http.get(`${API_BASE_URLS.core}/manager/audit-logs`, async ({ request }) => {
-    await delay(150);
-    const url = new URL(request.url);
-    const query = (url.searchParams.get("query") || "").toLowerCase();
-    const action = url.searchParams.get("action") || "";
-    const source = url.searchParams.get("source") || "";
-    let logs = sessionDb.getAuditLogs();
+  http.post(`${API_BASE_URLS.core}/parking-sessions/:caseId/mismatch/reject`, async ({ params, request }) => {
+    await delay(200);
+    const { reason } = await request.json();
+    const cases = sessionDb.getMismatch();
+    const item = cases.find((caseItem) => Number(caseItem.sessionId || caseItem.id) === Number(params.caseId));
+    if (!item) return notFound("Không tìm thấy hồ sơ lệch biển số.");
 
-    if (query) {
-      logs = logs.filter((log) =>
-        log.actor.toLowerCase().includes(query) ||
-        log.action.toLowerCase().includes(query) ||
-        log.detail.toLowerCase().includes(query)
-      );
-    }
-    if (action) logs = logs.filter((log) => log.action === action);
-    if (source) logs = logs.filter((log) => log.source === source);
-
-    return ok(logs);
+    item.status = "REJECTED";
+    item.decidedAt = new Date().toISOString();
+    item.decidedBy = "manager01";
+    item.decisionReason = reason;
+    sessionDb.saveMismatch(cases);
+    sessionDb.addAuditLog("manager01", `PLATE_MISMATCH_REJECT`, `Hồ sơ ${item.caseCode}. Lý do: ${reason}`, "WARNING", "MANAGER");
+    return ok(item);
   }),
+
+  ...enabled(
+    MOCK_FLAGS.ADMIN_AUDIT,
+    http.get(`${API_BASE_URLS.support}/audit-logs`, async ({ request }) => {
+      await delay(150);
+      const url = new URL(request.url);
+      const query = (url.searchParams.get("query") || "").toLowerCase();
+      const action = url.searchParams.get("action") || "";
+      const source = url.searchParams.get("source") || "";
+      let logs = sessionDb.getAuditLogs();
+
+      if (query) {
+        logs = logs.filter((log) =>
+          log.actor.toLowerCase().includes(query) ||
+          log.action.toLowerCase().includes(query) ||
+          log.detail.toLowerCase().includes(query)
+        );
+      }
+      if (action) logs = logs.filter((log) => log.action === action);
+      if (source) logs = logs.filter((log) => log.source === source);
+
+      return ok(logs);
+    })
+  ),
+
+  ...enabled(
+    MOCK_FLAGS.ADMIN_AUDIT,
+    http.get(`${API_BASE_URLS.support}/audit-logs/export-excel`, async () => {
+      await delay(300);
+      // Return a dummy blob for the Excel file
+      const blob = new Blob(["dummy excel content"], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      return new HttpResponse(blob, {
+        headers: {
+          "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          "Content-Disposition": `attachment; filename="AuditLog_Mock.xlsx"`,
+        },
+      });
+    })
+  ),
 
   http.get(`${API_BASE_URLS.public}/public/lookup/:qrToken`, async ({ params }) => {
     await delay(150);
@@ -361,7 +409,7 @@ export const adminHandlers = [
     return ok(newCase);
   }),
 
-  http.get(`${API_BASE_URLS.core}/manager/reports/summary`, async () => {
+  http.get(`${API_BASE_URLS.support}/reports/summary`, async () => {
     await delay(150);
     return ok({
       revenueToday: 3980000,
@@ -373,7 +421,7 @@ export const adminHandlers = [
     });
   }),
 
-  http.get(`${API_BASE_URLS.core}/manager/reports/revenue`, async () => {
+  http.get(`${API_BASE_URLS.support}/reports/revenue`, async () => {
     await delay(150);
     return ok([
       { label: "10/06", revenue: 3250000 },
@@ -386,7 +434,7 @@ export const adminHandlers = [
     ]);
   }),
 
-  http.get(`${API_BASE_URLS.core}/manager/reports/traffic`, async () => {
+  http.get(`${API_BASE_URLS.support}/reports/traffic`, async () => {
     await delay(150);
     return ok([
       { label: "06:00", entry: 18, exit: 6 },
@@ -398,7 +446,7 @@ export const adminHandlers = [
     ]);
   }),
 
-  http.get(`${API_BASE_URLS.core}/manager/reports/occupancy`, async () => {
+  http.get(`${API_BASE_URLS.support}/reports/occupancy`, async () => {
     await delay(150);
     return ok([
       { label: "B1-A", occupancy: 72 },
@@ -408,6 +456,30 @@ export const adminHandlers = [
       { label: "B3-A", occupancy: 41 },
       { label: "B3-B", occupancy: 58 },
     ]);
+  }),
+
+  http.get(`${API_BASE_URLS.support}/reports/cards`, async () => {
+    await delay(150);
+    return ok([
+      { label: "Tháng 1", issued: 120, revoked: 10 },
+      { label: "Tháng 2", issued: 150, revoked: 15 },
+      { label: "Tháng 3", issued: 180, revoked: 5 },
+    ]);
+  }),
+
+  http.get(`${API_BASE_URLS.support}/reports/sessions`, async () => {
+    await delay(150);
+    return ok([
+      { label: "Ô tô", count: 450 },
+      { label: "Xe máy", count: 1250 },
+      { label: "Xe đạp", count: 80 },
+    ]);
+  }),
+
+  http.get(`${API_BASE_URLS.support}/reports/export-excel`, async () => {
+    await delay(150);
+    // Mock blob return
+    return new HttpResponse(new Blob(["mock-excel-data"], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
   }),
 
   // =========================================================================
@@ -468,7 +540,7 @@ export const adminHandlers = [
 
   ...enabled(
     MOCK_FLAGS.ADMIN_USERS,
-    http.put(`${API_BASE_URLS.core}/admin/users/:id/role`, async ({ params, request }) => {
+    http.patch(`${API_BASE_URLS.core}/admin/users/:id/role`, async ({ params, request }) => {
       await delay(250);
       const userId = Number(params.id);
       const { role } = await request.json();
@@ -484,7 +556,7 @@ export const adminHandlers = [
 
   ...enabled(
     MOCK_FLAGS.ADMIN_USERS,
-    http.put(`${API_BASE_URLS.core}/admin/users/:id/status`, async ({ params, request }) => {
+    http.patch(`${API_BASE_URLS.core}/admin/users/:id/status`, async ({ params, request }) => {
       await delay(250);
       const userId = Number(params.id);
       const { status } = await request.json();
@@ -495,6 +567,71 @@ export const adminHandlers = [
       users[index].status = status;
       db.saveUsers(users);
       return ok(users[index]);
+    })
+  ),
+
+  ...enabled(
+    MOCK_FLAGS.ADMIN_SESSIONS,
+    http.get(`${API_BASE_URLS.core}/parking-sessions/search`, async ({ request }) => {
+      await delay(200);
+      const url = new URL(request.url);
+      const keyword = (url.searchParams.get("keyword") || "").trim().toLowerCase();
+      const status = url.searchParams.get("status") || "ALL";
+      
+      let sessions = sessionDb.getSessions();
+      
+      if (status !== "ALL") {
+        sessions = sessions.filter(s => s.status === status);
+      }
+      
+      if (keyword) {
+        sessions = sessions.filter(s => 
+          (s.sessionCode && s.sessionCode.toLowerCase().includes(keyword)) ||
+          (s.cardCode && s.cardCode.toLowerCase().includes(keyword)) ||
+          (s.plateNumber && s.plateNumber.toLowerCase().includes(keyword))
+        );
+      }
+      
+      return ok(sessions);
+    })
+  ),
+
+  ...enabled(
+    MOCK_FLAGS.ADMIN_SESSIONS,
+    http.post(`${API_BASE_URLS.core}/parking-sessions/:sessionId/cancel`, async ({ params, request }) => {
+      await delay(200);
+      const { reason } = await request.json();
+      const sessions = sessionDb.getSessions();
+      const session = sessions.find((item) => Number(item.id) === Number(params.sessionId));
+      
+      if (!session) return notFound("Không tìm thấy phiên.");
+      
+      session.status = "CANCELLED";
+      session.cancellationReason = reason;
+      
+      sessionDb.saveSessions(sessions);
+      sessionDb.addAuditLog("admin01", "SESSION_CANCELLED", `Hủy phiên ${session.sessionCode}. Lý do: ${reason}`, "WARNING", "ADMIN");
+      return ok(session);
+    })
+  ),
+
+  ...enabled(
+    MOCK_FLAGS.ADMIN_SESSIONS,
+    http.post(`${API_BASE_URLS.core}/parking-sessions/:sessionId/move-slot`, async ({ params, request }) => {
+      await delay(200);
+      const { reason, newSlotId } = await request.json();
+      const sessions = sessionDb.getSessions();
+      const session = sessions.find((item) => Number(item.id) === Number(params.sessionId));
+      
+      if (!session) return notFound("Không tìm thấy phiên.");
+      
+      // Update session's slot id loosely
+      session.slotId = Number(newSlotId);
+      session.overrideReason = reason;
+      
+      sessionDb.saveSessions(sessions);
+      sessionDb.addAuditLog("admin01", "SESSION_MOVED_SLOT", `Điều chuyển phiên ${session.sessionCode} sang slot ${newSlotId}. Lý do: ${reason}`, "INFO", "ADMIN");
+      return ok(session);
     })
   ),
 ];

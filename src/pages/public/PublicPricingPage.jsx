@@ -1,18 +1,12 @@
 import React, { useState, useEffect } from "react";
 import { pricingService } from "@/services/pricingService";
-import { parkingService } from "@/services/parkingService";
+import { DollarSign, Moon, Sun, CreditCard, AlertTriangle } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { COMMON_STATUS } from "@/constants";
-import {
-  Table,
-  TableHeader,
-  TableBody,
-  TableRow,
-  TableHead,
-  TableCell,
-} from "@/components/ui/table";
+import EmptyState from "@/components/ui/empty-state";
 
 function formatVND(amount) {
+  if (!amount && amount !== 0) return "–";
   return amount.toLocaleString("vi-VN") + "đ";
 }
 
@@ -29,8 +23,10 @@ export default function PublicPricingPage() {
     try {
       const data = await pricingService.getPricingRules();
       setRules(data);
-      const types = await parkingService.getVehicleTypes();
-      setVehicleTypes(types);
+      
+      // Lấy danh sách loại xe duy nhất từ dữ liệu bảng giá trả về
+      const uniqueTypes = Array.from(new Set(data.map(r => r.vehicleTypeName))).filter(Boolean);
+      setVehicleTypes(uniqueTypes);
     } catch {
       setError("Không tải được thông tin bảng giá. Vui lòng thử lại.");
     } finally {
@@ -40,95 +36,131 @@ export default function PublicPricingPage() {
 
   useEffect(() => { load(); }, []);
 
-  const activeRules = rules.filter((r) => r.status === COMMON_STATUS.ACTIVE);
+  // Backend returns only ACTIVE rules
   const displayed = filterVehicle === "ALL"
-    ? activeRules
-    : activeRules.filter((r) => r.vehicleTypeName === filterVehicle);
+    ? rules
+    : rules.filter((r) => r.vehicleTypeName === filterVehicle);
 
-  const vehicleOptions = ["ALL", ...vehicleTypes.map((v) => v.name)];
+  const vehicleOptions = ["ALL", ...vehicleTypes];
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      {/* Header */}
-      <div className="bg-gradient-to-br from-emerald-600 to-emerald-900 text-white">
-        <div className="max-w-5xl mx-auto px-6 py-12">
-          <h1 className="text-3xl font-black mb-2">Bảng Giá Gửi Xe</h1>
-          <p className="text-emerald-200 text-sm">
-            Giá hiển thị là giá đang áp dụng. Phí có thể thay đổi theo chính sách bãi.
+    <div className="bg-gray-50 min-h-full">
+      {/* Page Header */}
+      <div className="bg-white border-b border-gray-200">
+        <div className="max-w-7xl mx-auto px-6 py-10">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center">
+              <DollarSign size={20} className="text-blue-600" />
+            </div>
+            <h1 className="text-2xl font-black text-gray-900">Bảng Giá Gửi Xe</h1>
+          </div>
+          <p className="text-gray-500 text-sm ml-13 pl-0.5">
+            Áp dụng từ 01/01/2026. Giá đã bao gồm thuế suất hiện hành.
           </p>
         </div>
       </div>
 
-      <div className="max-w-5xl mx-auto px-6 py-8 space-y-6">
+      <div className="max-w-7xl mx-auto px-6 py-8 space-y-6">
         {/* Filter */}
-        <div className="flex items-center gap-3 flex-wrap">
-          <span className="text-xs font-black text-slate-500 uppercase tracking-widest">Lọc theo loại xe:</span>
-          {vehicleOptions.map((v) => (
-            <Button
-              key={v}
-              onClick={() => setFilterVehicle(v)}
-              variant={filterVehicle === v ? "default" : "outline"}
-              className={`rounded-full px-4 text-xs font-bold transition-all ${
-                filterVehicle === v
-                  ? "bg-emerald-600 hover:bg-emerald-700 border-emerald-600 text-white"
-                  : "bg-white text-slate-600 border-slate-300 hover:border-emerald-400"
-              }`}
-            >
-              {v === "ALL" ? "Tất cả" : v}
-            </Button>
-          ))}
-        </div>
+        <Card className="shadow-sm p-4 flex flex-wrap items-center gap-3">
+          <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Loại xe:</span>
+          <div className="flex flex-wrap gap-2">
+            {vehicleOptions.map((v) => (
+              <Button
+                key={v}
+                variant={filterVehicle === v ? "default" : "outline"}
+                size="sm"
+                onClick={() => setFilterVehicle(v)}
+                className={`rounded-full ${filterVehicle === v ? "bg-blue-600 hover:bg-blue-700" : "hover:text-blue-600 hover:border-blue-400"}`}
+              >
+                {v === "ALL" ? "Tất cả" : v}
+              </Button>
+            ))}
+          </div>
+        </Card>
 
-        {/* Table */}
-        <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-          {isLoading ? (
-            <div className="p-8 space-y-3 animate-pulse">
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="h-12 bg-slate-100 rounded" />
-              ))}
-            </div>
-          ) : error ? (
-            <div className="p-10 text-center">
-              <p className="text-red-500 text-sm font-semibold mb-3">⚠ {error}</p>
-              <Button onClick={load} variant="link" className="text-sm font-bold text-emerald-600 underline p-0 h-auto">Thử lại</Button>
-            </div>
-          ) : displayed.length === 0 ? (
-            <div className="p-10 text-center text-slate-400">
-              <p className="text-4xl mb-2">💰</p>
-              <p className="font-semibold">Chưa có bảng giá cho loại xe này</p>
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-slate-50 border-b border-slate-200 text-xs font-black text-slate-500 uppercase tracking-wider">
-                  <TableHead className="px-5 py-3 text-left">Loại Xe</TableHead>
-                  <TableHead className="px-5 py-3 text-right">Giá Ban Ngày</TableHead>
-                  <TableHead className="px-5 py-3 text-right">Giá Ban Đêm</TableHead>
-                  <TableHead className="px-5 py-3 text-right">Vé Tháng</TableHead>
-                  <TableHead className="px-5 py-3 text-right">Phí Mất Thẻ</TableHead>
-                  <TableHead className="px-5 py-3 text-center">Hiệu Lực Từ</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody className="divide-y divide-slate-100">
-                {displayed.map((rule) => (
-                  <TableRow key={rule.id} className="hover:bg-emerald-50 transition-colors">
-                    <TableCell className="px-5 py-4 font-bold text-slate-800">{rule.vehicleTypeName}</TableCell>
-                    <TableCell className="px-5 py-4 text-right font-semibold text-slate-700">{formatVND(rule.dayPrice)}</TableCell>
-                    <TableCell className="px-5 py-4 text-right font-semibold text-slate-700">{formatVND(rule.nightPrice)}</TableCell>
-                    <TableCell className="px-5 py-4 text-right font-bold text-emerald-700">{formatVND(rule.monthlyPrice)}</TableCell>
-                    <TableCell className="px-5 py-4 text-right font-semibold text-red-600">{formatVND(rule.lostCardFee)}</TableCell>
-                    <TableCell className="px-5 py-4 text-center text-slate-500">{rule.effectiveFrom}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </div>
+        {/* Cards */}
+        {isLoading ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 animate-pulse">
+            {[1, 2, 3].map((i) => <div key={i} className="h-64 bg-gray-200 rounded-2xl" />)}
+          </div>
+        ) : error ? (
+          <Card className="bg-red-50 border-red-200 p-10 text-center shadow-none">
+            <AlertTriangle size={32} className="text-red-400 mx-auto mb-3" />
+            <p className="text-red-600 text-sm font-semibold mb-3">{error}</p>
+            <Button variant="destructive" onClick={load}>
+              Thử lại
+            </Button>
+          </Card>
+        ) : displayed.length === 0 ? (
+          <EmptyState 
+            icon={<DollarSign size={40} className="text-gray-300" />} 
+            title="Chưa có bảng giá" 
+            description="Không tìm thấy thông tin cho loại xe này." 
+            className="border-gray-100"
+          />
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {displayed.map((rule) => (
+              <Card
+                key={rule.pricingRuleId ?? rule.id}
+                className="shadow-sm hover:shadow-md hover:border-blue-200 transition-all overflow-hidden"
+              >
+                {/* Card Header */}
+                <div className="bg-blue-600 px-6 py-4">
+                  <h3 className="text-base font-black text-white uppercase tracking-wide">{rule.vehicleTypeName}</h3>
+                </div>
+
+                {/* Card Body */}
+                <CardContent className="p-5 space-y-3">
+                  {/* Monthly Highlight */}
+                  <div className="bg-blue-50 border border-blue-100 rounded-xl p-4">
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <CreditCard size={13} className="text-blue-500" />
+                      <span className="text-[10px] font-black text-blue-600 uppercase tracking-widest">Vé Tháng</span>
+                    </div>
+                    <p className="text-2xl font-black text-blue-700">
+                      {formatVND(rule.monthlyPrice)}
+                      <span className="text-xs font-normal text-gray-400 ml-1">/ tháng</span>
+                    </p>
+                  </div>
+
+                  {/* Day / Night */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-gray-50 rounded-xl p-3 text-center border border-gray-100">
+                      <div className="flex items-center justify-center gap-1 mb-1">
+                        <Sun size={12} className="text-yellow-500" />
+                        <span className="text-[10px] font-bold text-gray-500 uppercase">Ban Ngày</span>
+                      </div>
+                      <p className="font-bold text-gray-800 text-sm">{formatVND(rule.dayPrice)}</p>
+                    </div>
+                    <div className="bg-gray-50 rounded-xl p-3 text-center border border-gray-100">
+                      <div className="flex items-center justify-center gap-1 mb-1">
+                        <Moon size={12} className="text-indigo-500" />
+                        <span className="text-[10px] font-bold text-gray-500 uppercase">Ban Đêm</span>
+                      </div>
+                      <p className="font-bold text-gray-800 text-sm">{formatVND(rule.nightPrice)}</p>
+                    </div>
+                  </div>
+
+                  {/* Lost Card Fee */}
+                  <div className="flex items-center justify-between bg-red-50 border border-red-100 rounded-xl px-4 py-2.5">
+                    <span className="text-xs font-semibold text-red-600">Phí mất thẻ</span>
+                    <span className="text-sm font-black text-red-700">{formatVND(rule.lostCardFee)}</span>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
 
         {/* Note */}
-        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-800 font-semibold dark:bg-amber-900/10 dark:text-amber-400 dark:border-amber-900/30">
-          ⚠️ Giá ban ngày áp dụng 06:00 – 22:00 | Giá ban đêm áp dụng 22:00 – 06:00.
-          Phí tính theo từng giờ lẻ làm tròn. Bảng giá có thể thay đổi không báo trước.
+        <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 flex gap-3 items-start text-sm text-yellow-800">
+          <AlertTriangle size={16} className="text-yellow-600 flex-shrink-0 mt-0.5" />
+          <p>
+            Giá ban ngày áp dụng <strong>06:00 – 22:00</strong> | Giá ban đêm áp dụng <strong>22:00 – 06:00</strong>.
+            Phí gửi giờ tính theo từng giờ lẻ làm tròn. Bảng giá có thể thay đổi mà không cần thông báo trước.
+          </p>
         </div>
       </div>
     </div>
